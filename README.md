@@ -4,15 +4,15 @@
 
 Convert screenshots into local, accessible HTML drafts for Canvas LMS. The original screenshot and resulting HTML must be compared before publication.
 
-## Files
+## Project layout
 
-| File | Purpose |
-|---|---|
-| `screenshot_to_canvas.py` | Main OCR and HTML generation script |
-| `requirements.txt` | Python dependencies |
-| `RULES.md` | Project rules every change and output must follow |
-| `README.md` | Setup and usage |
-| `FAQ.md` | Current features and limitations |
+```text
+imgtohtml/   Application package: converter, desktop UI, and review summary
+tests/       Unit tests
+docs/        FAQ and project documentation
+README.md    Setup and usage
+requirements.txt
+```
 
 ## Installation
 
@@ -24,41 +24,45 @@ python -m pip install -r requirements.txt
 
 ## Usage
 
-Terminal screenshot:
+Run the command-line converter with:
 
 ```bash
-python screenshot_to_canvas.py example.gif --type terminal
+python -m imgtohtml.screenshot_to_canvas example.gif --type terminal
 ```
 
-Code screenshot:
+Launch the desktop interface with:
 
 ```bash
-python screenshot_to_canvas.py example.png --type code
+python -m imgtohtml.ui
 ```
 
-Software interface:
+The converter also supports `code`, `interface`, and `diagram` types:
 
 ```bash
-python screenshot_to_canvas.py application.png --type interface
-```
-
-Diagram text:
-
-```bash
-python screenshot_to_canvas.py diagram.png --type diagram
+python -m imgtohtml.screenshot_to_canvas example.png --type code
 ```
 
 Provide a meaningful description:
 
 ```bash
-python screenshot_to_canvas.py example.gif --label "Terminal showing output from a Python program"
+python -m imgtohtml.screenshot_to_canvas example.gif --label "Terminal showing output from a Python program"
 ```
 
 Use a corrected transcript:
 
 ```bash
-python screenshot_to_canvas.py example.gif --transcript out/example_transcript.txt
+python -m imgtohtml.screenshot_to_canvas example.gif --transcript out/example_transcript.txt
 ```
+
+## Tests
+
+Run the unit test suite from the project root:
+
+```bash
+python -m unittest discover -v
+```
+
+See [docs/FAQ.md](docs/FAQ.md) for feature and limitation details.
 
 ## Version 1.1 changes
 
@@ -83,7 +87,7 @@ Updated word-spacing reconstruction to measure the horizontal distance between c
 - Leading indentation continues to be inferred from OCR coordinates.
 - No changes to command-line options, privacy rules, color detection, or HTML rendering.
 
-Run `python -m unittest -v test_spacing.py` to execute the synthetic spacing tests.
+The synthetic spacing tests are included in the full test suite above.
 
 **Limitation:** OCR spacing remains an estimate. Exact preservation of source characters and whitespace requires comparison against the screenshot.
 
@@ -106,8 +110,7 @@ out/
   Media_example.gif.html
   example_transcript.txt
   example_review.json
-  preview.html
+  example_preview.html
 ```
 
 Only the `Media_*.html` fragment is intended for Canvas. The preview uses a style block for local comparison only.
-

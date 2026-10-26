@@ -1,0 +1,15 @@
+explorer                 © helloworldpy x                                                                   oO
+
+SeeEe        © belo ssiicy                                                                               -
+ re RASSEE             1    print(*Hello, World")
+
+
+
+                        Problems   Output   Debug Console  Terminal   Ports         Browershr A +»    DO       a  x
+
+
+                        © PS C:\Users\username\CS104-Assignnents> python helle_world
+                          C:\Users\username\appbata \Local\Python\pythoncore-3.14-Ga\python.exe: can't open file ‘C:\\
+                          Users\\usernane\\CS104-Assignnents\ hello world’: [Erno 2] No such File or directory
+
+                       PS C:\Users\username\Csia4-Assignnents> ff

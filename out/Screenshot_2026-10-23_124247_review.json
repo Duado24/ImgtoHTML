@@ -1,0 +1,173 @@
+{
+  "type": "terminal",
+  "low_confidence_words": [
+    {
+      "text": "explorer",
+      "confidence": 37.0
+    },
+    {
+      "text": "\u00a9",
+      "confidence": 60.0
+    },
+    {
+      "text": "helloworldpy",
+      "confidence": 31.0
+    },
+    {
+      "text": "x",
+      "confidence": 55.0
+    },
+    {
+      "text": "oO",
+      "confidence": 0.0
+    },
+    {
+      "text": "SeeEe",
+      "confidence": 0.0
+    },
+    {
+      "text": "\u00a9",
+      "confidence": 64.0
+    },
+    {
+      "text": "belo",
+      "confidence": 31.0
+    },
+    {
+      "text": "ssiicy",
+      "confidence": 0.0
+    },
+    {
+      "text": "-",
+      "confidence": 59.0
+    },
+    {
+      "text": "re",
+      "confidence": 0.0
+    },
+    {
+      "text": "RASSEE",
+      "confidence": 0.0
+    },
+    {
+      "text": "1",
+      "confidence": 68.0
+    },
+    {
+      "text": "print(*Hello,",
+      "confidence": 36.0
+    },
+    {
+      "text": "World\")",
+      "confidence": 32.0
+    },
+    {
+      "text": "Output",
+      "confidence": 58.0
+    },
+    {
+      "text": "Debug",
+      "confidence": 63.0
+    },
+    {
+      "text": "Browershr",
+      "confidence": 12.0
+    },
+    {
+      "text": "+\u00bb",
+      "confidence": 57.0
+    },
+    {
+      "text": "DO",
+      "confidence": 4.0
+    },
+    {
+      "text": "a",
+      "confidence": 53.0
+    },
+    {
+      "text": "x",
+      "confidence": 43.0
+    },
+    {
+      "text": "\u00a9",
+      "confidence": 57.0
+    },
+    {
+      "text": "C:\\Users\\username\\CS104-Assignnents>",
+      "confidence": 34.0
+    },
+    {
+      "text": "helle_world",
+      "confidence": 25.0
+    },
+    {
+      "text": "C:\\Users\\username\\appbata",
+      "confidence": 22.0
+    },
+    {
+      "text": "\\Local\\Python\\pythoncore-3.14-Ga\\python.exe:",
+      "confidence": 18.0
+    },
+    {
+      "text": "can't",
+      "confidence": 64.0
+    },
+    {
+      "text": "\u2018C:\\\\",
+      "confidence": 19.0
+    },
+    {
+      "text": "Users\\\\usernane\\\\CS104-Assignnents\\",
+      "confidence": 19.0
+    },
+    {
+      "text": "hello",
+      "confidence": 19.0
+    },
+    {
+      "text": "world\u2019:",
+      "confidence": 44.0
+    },
+    {
+      "text": "[Erno",
+      "confidence": 26.0
+    },
+    {
+      "text": "PS",
+      "confidence": 34.0
+    },
+    {
+      "text": "C:\\Users\\username\\Csia4-Assignnents>",
+      "confidence": 24.0
+    },
+    {
+      "text": "ff",
+      "confidence": 37.0
+    }
+  ],
+  "original_colors": {
+    "background": "#191a1b",
+    "foreground": "#bfbfbf"
+  },
+  "contrast_changes": [],
+  "second_color_ratio": 0.39,
+  "check_colors_by_hand": true,
+  "contrast_ratio": 9.48,
+  "privacy": {
+    "home_path_masking": true,
+    "learned_email_identity_masking": true,
+    "generic_email_replacement": false,
+    "manual_review_required": true
+  },
+  "limitations": [
+    "OCR requires character-by-character review",
+    "Whitespace reconstruction is approximate",
+    "Only one foreground color is estimated",
+    "Text color is measured inside OCR word boxes; multi-colored text uses the most common color",
+    "Diagram geometry is not reconstructed",
+    "UI controls are not reconstructed",
+    "Animated GIFs use their final frame",
+    "Username masking is pattern-based and incomplete"
+  ]
+}

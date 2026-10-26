@@ -1,9 +1,12 @@
-
 #!/usr/bin/env python3
-"""ImgtoHTML v1.2.4: local OCR-first Canvas HTML draft generator.
+"""ImgtoHTML v1.2.5: local OCR-first Canvas HTML draft generator.
 
-v1.2.3 color extraction retained; v1.2.4 adds convert() as a
-reusable entry point for a future local UI.
+v1.2.3: text color measured inside OCR word boxes.
+v1.2.4: convert() as a reusable entry point for the local UI.
+v1.2.5: one preview file per image; blank label/caption treated
+        as "not given".
+v1.2.6: one <div> per line (Canvas-safe); terminal output wraps
+        with a hanging indent, code scrolls inside its own box.
 
 Outputs require manual verification.
 """
@@ -468,51 +471,64 @@ def render(
     foreground,
     caption=None
 ):
-    escaped_text = html.escape(
-        "\n".join(lines)
-    )
+    """Build the Canvas HTML fragment.
+
+    Each line of text is its own <div>, with no raw line breaks
+    between them. Canvas's editor once split a <pre> block at a
+    blank line and moved the rest outside the figure; separate
+    line elements give it nothing to split.
+
+    Long lines:
+      - code: never wrap (wrapping can change meaning); the code
+        box scrolls sideways inside itself, the page does not.
+      - everything else: wrap, with continued parts indented
+        (hanging indent) so they read as the same line.
+    """
 
     bg = rgb_hex(background)
     fg = rgb_hex(foreground)
 
-    white_space = (
-        "pre"
-        if kind in ("terminal", "code")
-        else "pre-wrap"
+    if kind == "code":
+        line_style = "white-space:pre;"
+        box_overflow = "overflow-x:auto;"
+    else:
+        line_style = (
+            "white-space:pre-wrap;overflow-wrap:anywhere;"
+            "padding-left:2ch;text-indent:-2ch;"
+        )
+        box_overflow = ""
+
+    line_divs = "\n".join(
+        f'    <div style="{line_style}">'
+        + (html.escape(line) if line else "<br>")
+        + "</div>"
+        for line in lines
     )
 
     caption_html = ""
 
     if caption:
         caption_html = (
-            '<p style="margin:10px 0 0;'
-            'color:#202124;'
+            '\n  <p style="margin:10px 0 0;padding:0;'
+            'color:#202124;background-color:transparent;'
             'font:14px/1.5 Arial,sans-serif;">'
             + html.escape(caption)
             + "</p>"
         )
 
-    return f'''<div role="figure"
-     aria-label="{html.escape(label, quote=True)}"
-     style="max-width:100%;min-width:0;margin:0;color:{fg};">
-
-  <div style="max-width:100%;min-width:0;overflow-x:auto;
-              background-color:{bg};border:1px solid {fg};
-              border-radius:6px;">
-
-    <pre style="margin:0;padding:12px;background-color:{bg};
-                color:{fg};border:0;border-radius:0;min-width:0;
-                white-space:{white_space};overflow-wrap:normal;
-                font:14px/1.5 Consolas,'Courier New',monospace;"><code
-       style="padding:0;background-color:transparent;color:{fg};
-              border:0;font:inherit;
-              white-space:inherit;">{escaped_text}</code></pre>
-
-  </div>
-
-  {caption_html}
-
-</div>'''
+    return (
+        '<div role="figure" '
+        f'aria-label="{html.escape(label, quote=True)}" '
+        'style="max-width:100%;min-width:0;margin:0;">\n'
+        '  <div style="max-width:100%;min-width:0;box-sizing:border-box;'
+        f'{box_overflow}padding:12px;background-color:{bg};color:{fg};'
+        f'border:1px solid {fg};border-radius:6px;'
+        "font:14px/1.5 Consolas,'Courier New',monospace;\">\n"
+        f"{line_divs}\n"
+        "  </div>"
+        f"{caption_html}\n"
+        "</div>"
+    )
 
 
 # ============================================================
@@ -544,7 +560,7 @@ def convert(
             html_file
             transcript_file
             review_file
-            preview_file
+            preview_file   (<name>_preview.html)
             html
             review
             ocr_line_count
@@ -570,6 +586,11 @@ def convert(
             f"Unknown type {kind!r}. "
             f"Expected one of {sorted(valid_kinds)}"
         )
+
+    # Empty text boxes send "" rather than None: treat blank text
+    # as "not given" so the default label and caption apply.
+    label = (label or "").strip() or None
+    caption = (caption or "").strip() or None
 
     image_path = Path(image_path)
     out = Path(out)
@@ -728,7 +749,9 @@ def convert(
         f"{stem}_review.json"
     )
 
-    preview_file = out / "preview.html"
+    # One preview per image, so converting several images into
+    # the same folder keeps every comparison page.
+    preview_file = out / f"{stem}_preview.html"
 
     # --------------------------------------------------------
     # REVIEW REPORT
@@ -768,6 +791,7 @@ def convert(
         "limitations": [
             "OCR requires character-by-character review",
             "Whitespace reconstruction is approximate",
+            "Only one foreground color is estimated",
             "Text color is measured inside OCR word boxes; "
             "multi-colored text uses the most common color",
             "Diagram geometry is not reconstructed",

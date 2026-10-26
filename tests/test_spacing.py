@@ -1,8 +1,7 @@
-
 import unittest
 from unittest.mock import patch
 
-from screenshot_to_canvas import extract
+from imgtohtml.screenshot_to_canvas import extract
 
 
 def fake_ocr(words):
@@ -43,7 +42,7 @@ class SpacingTests(unittest.TestCase):
         data = fake_ocr(words)
 
         with patch(
-            "screenshot_to_canvas.pytesseract.image_to_data",
+            "imgtohtml.screenshot_to_canvas.pytesseract.image_to_data",
             return_value=data
         ):
             lines, _ = extract(None)

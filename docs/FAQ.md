@@ -1,4 +1,4 @@
-# AutoCanv FAQ — v1.1
+# AutoCanv FAQ — v1.2.5
 
 **Does the script require an AI API?**
 
