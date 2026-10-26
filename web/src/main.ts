@@ -1,0 +1,327 @@
+import "./style.css";
+
+import { convert, issuesFor, previewPage, type ConvertResult, type OutputFile } from "./core/convert";
+import { isKind } from "./core/types";
+import { decodeImage, SUPPORTED, type Decoded } from "./browser/image";
+import { recognizeWords, warmUp } from "./browser/ocr";
+import type { OcrWord } from "./core/types";
+
+const MAX_MB = 25;
+
+function $<T extends HTMLElement = HTMLElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`Missing #${id}`);
+  return el as T;
+}
+
+const shell = $("shell");
+const status = $("status");
+const form = $<HTMLFormElement>("form");
+const go = $<HTMLButtonElement>("go");
+const reconvert = $<HTMLButtonElement>("reconvert");
+const labelInput = $<HTMLInputElement>("label");
+const captionInput = $<HTMLInputElement>("caption");
+
+let file: File | null = null;
+let lastHTML = "";
+/** OCR is the slow part; keep its result while the same file is chosen,
+ *  so "Re-convert with this text" is instant. */
+let cache: { file: File; image: Decoded; words: OcrWord[] } | null = null;
+let objectUrls: string[] = [];
+
+/* ── Theme (remembered per browser) ─────────────── */
+const root = document.documentElement;
+try {
+  const t = localStorage.getItem("imgtohtml-theme");
+  if (t) root.dataset.theme = t;
+} catch {}
+$("theme").onclick = () => {
+  root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+  try {
+    localStorage.setItem("imgtohtml-theme", root.dataset.theme);
+  } catch {}
+};
+
+/* ── Status line ────────────────────────────────── */
+function say(msg: string, isErr = false) {
+  status.className = "status" + (isErr ? " err" : "");
+  status.textContent = msg;
+  if (!isErr) {
+    const c = document.createElement("span");
+    c.className = "cursor";
+    c.setAttribute("aria-hidden", "true");
+    status.appendChild(c);
+  }
+}
+
+/* ── File choice / drag and drop ────────────────── */
+const drop = $("drop");
+const input = $<HTMLInputElement>("file");
+
+function setFile(f: File | undefined) {
+  if (!f) return;
+  const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
+  if (!(SUPPORTED as readonly string[]).includes(ext)) {
+    say("Unsupported image format. Use PNG, JPG, GIF, WEBP, or BMP.", true);
+    return;
+  }
+  if (f.size > MAX_MB * 1024 * 1024) {
+    say(`That file is larger than ${MAX_MB} MB.`, true);
+    return;
+  }
+  file = f;
+  $("fname").textContent = f.name;
+  $("fmeta").textContent = (f.size / 1024).toFixed(0) + " KB · click to change";
+  const orig = $<HTMLImageElement>("orig");
+  if (orig.src.startsWith("blob:")) URL.revokeObjectURL(orig.src);
+  orig.src = URL.createObjectURL(f);
+  $("orig-label").textContent = /\.gif$/i.test(f.name) ? "Original · animated; HTML uses the final frame" : "Original";
+  say("Ready");
+}
+
+input.onchange = () => setFile(input.files?.[0]);
+for (const ev of ["dragenter", "dragover"]) {
+  drop.addEventListener(ev, (e) => {
+    e.preventDefault();
+    drop.classList.add("over");
+  });
+}
+for (const ev of ["dragleave", "drop"]) {
+  drop.addEventListener(ev, (e) => {
+    e.preventDefault();
+    drop.classList.remove("over");
+  });
+}
+drop.addEventListener("drop", (e) => setFile((e as DragEvent).dataTransfer?.files[0]));
+
+/* ── Convert ────────────────────────────────────── */
+const STEPS: Record<string, string> = {
+  "loading tesseract core": "Loading the text reader…",
+  "initializing tesseract": "Loading the text reader…",
+  "loading language traineddata": "Loading English language data…",
+  "initializing api": "Starting the text reader…",
+  "recognizing text": "Reading text",
+};
+
+async function run(transcriptText?: string) {
+  if (!file) return say("Choose a screenshot first.", true);
+  if (!labelInput.value.trim()) {
+    say("Enter a screen-reader label: one sentence describing what the screenshot shows.", true);
+    labelInput.focus();
+    return;
+  }
+  const kind = new FormData(form).get("kind")?.toString() ?? "terminal";
+  if (!isKind(kind)) return say("Choose a supported screenshot type.", true);
+
+  shell.classList.add("busy");
+  go.disabled = reconvert.disabled = true;
+
+  try {
+    if (cache?.file !== file) {
+      say("Opening the image…");
+      const image = await decodeImage(file);
+      const words = await recognizeWords(image.canvas, (step, progress) => {
+        const text = STEPS[step] ?? "Working…";
+        say(step === "recognizing text" ? `${text} ${Math.round(progress * 100)}%…` : text);
+      });
+      cache = { file, image, words };
+    }
+
+    say("Measuring colors…");
+    const result = convert({
+      fileName: file.name,
+      pixels: cache.image.pixels,
+      words: cache.words,
+      animated: cache.image.animated,
+      kind,
+      label: labelInput.value,
+      caption: captionInput.value,
+      transcript: transcriptText,
+    });
+    show(result, previewPage(result, cache.image.canvas.toDataURL("image/png")));
+    say("Draft ready. Review it before pasting into Canvas.");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    say(`Conversion failed: ${msg}`, true);
+  } finally {
+    shell.classList.remove("busy");
+    go.disabled = reconvert.disabled = false;
+  }
+}
+
+form.onsubmit = (e) => {
+  e.preventDefault();
+  void run();
+};
+reconvert.onclick = () => void run($<HTMLTextAreaElement>("transcript").value);
+
+/* ── Show results ───────────────────────────────── */
+function downloadButton(out: OutputFile, text: string): HTMLAnchorElement {
+  const url = URL.createObjectURL(new Blob([out.content], { type: `${out.mime};charset=utf-8` }));
+  objectUrls.push(url);
+  const a = document.createElement("a");
+  a.className = "btn";
+  a.href = url;
+  a.download = out.name;
+  a.textContent = text;
+  a.title = out.name;
+  return a;
+}
+
+function show(result: ConvertResult, preview: OutputFile) {
+  $("empty").hidden = true;
+  $("results").hidden = false;
+  lastHTML = result.html;
+  const { review } = result;
+
+  $("s-lines").textContent = String(result.lineCount);
+  $("s-low").textContent = String(result.lowConfidenceCount);
+  $("s-low").style.color = result.lowConfidenceCount ? "var(--coral)" : "";
+  $("s-contrast").textContent = review.contrast_ratio.toFixed(1);
+  const { background, foreground } = review.rendered_colors;
+  $("sw-bg").style.background = background;
+  $("t-bg").textContent = "BG " + background;
+  $("sw-fg").style.background = foreground;
+  $("t-fg").textContent = "TEXT " + foreground;
+
+  const list = $("issues");
+  list.innerHTML = "";
+  const names = { error: "Check", warn: "Warning", info: "Note" } as const;
+  for (const it of issuesFor(review)) {
+    const li = document.createElement("li");
+    li.className = it.level;
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = names[it.level];
+    const body = document.createElement("div");
+    body.textContent = it.text;
+    if (it.words) {
+      const w = document.createElement("div");
+      for (const word of it.words) {
+        const c = document.createElement("code");
+        c.textContent = word;
+        w.appendChild(c);
+      }
+      body.appendChild(w);
+    }
+    li.append(tag, body);
+    list.appendChild(li);
+  }
+
+  // Download links replace the out/ folder of the Python version.
+  for (const url of objectUrls) URL.revokeObjectURL(url);
+  objectUrls = [];
+  const files = $("files");
+  files.replaceChildren(files.firstElementChild!);
+  files.append(
+    downloadButton(result.htmlFile, "Canvas HTML"),
+    downloadButton(result.transcriptFile, "Transcript"),
+    downloadButton(result.reviewFile, "Review JSON"),
+    downloadButton(preview, "Comparison page"),
+  );
+
+  $("code").textContent = result.html;
+  $<HTMLTextAreaElement>("transcript").value = result.transcript;
+
+  const frame = $<HTMLIFrameElement>("render");
+  frame.onload = () => {
+    const h = frame.contentDocument?.documentElement.scrollHeight ?? 0;
+    frame.style.height = Math.max(240, h + 4) + "px";
+  };
+  frame.srcdoc =
+    '<!doctype html><meta name="viewport" content="width=device-width">' +
+    '<body style="margin:16px;background:#fff;color:#2d3b45;font-family:Lato,Arial,sans-serif">' +
+    result.html +
+    "</body>";
+}
+
+/* ── Preview width ──────────────────────────────── */
+document.querySelectorAll<HTMLInputElement>('input[name="width"]').forEach((r) => {
+  r.onchange = () => $("compare").classList.toggle("phone", r.value === "phone" && r.checked);
+});
+
+/* ── Copy ───────────────────────────────────────── */
+$("copy").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(lastHTML);
+  } catch {
+    const t = document.createElement("textarea");
+    t.value = lastHTML;
+    document.body.appendChild(t);
+    t.select();
+    document.execCommand("copy");
+    t.remove();
+  }
+  $("copy-text").textContent = "Copied ✓";
+  setTimeout(() => ($("copy-text").textContent = "Copy HTML"), 1600);
+};
+
+/* ── Tabs (click + arrow keys) ──────────────────── */
+const tabs = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+function pick(tab: HTMLButtonElement) {
+  for (const t of tabs) {
+    const on = t === tab;
+    t.setAttribute("aria-selected", String(on));
+    t.tabIndex = on ? 0 : -1;
+    $(t.getAttribute("aria-controls")!).hidden = !on;
+  }
+  tab.focus();
+}
+tabs.forEach((t, i) => {
+  t.onclick = () => pick(t);
+  t.onkeydown = (e) => {
+    if (e.key === "ArrowRight") pick(tabs[(i + 1) % tabs.length]!);
+    if (e.key === "ArrowLeft") pick(tabs[(i - 1 + tabs.length) % tabs.length]!);
+  };
+});
+
+/* ── Subtle animated noise background (WebGL) ───── */
+function noise() {
+  const cv = $<HTMLCanvasElement>("noise");
+  const gl = cv.getContext("webgl");
+  if (!gl || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const vs = "attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}";
+  const fs =
+    "precision mediump float;uniform float t;" +
+    "float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233))+t)*43758.5453);}" +
+    "void main(){float n=h(floor(gl_FragCoord.xy/2.));gl_FragColor=vec4(vec3(n),1.);}";
+  const sh = (type: number, src: string) => {
+    const s = gl.createShader(type)!;
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  };
+  const pr = gl.createProgram()!;
+  gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs));
+  gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(pr);
+  gl.useProgram(pr);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(pr, "p");
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const tl = gl.getUniformLocation(pr, "t");
+  const size = () => {
+    cv.width = innerWidth / 2;
+    cv.height = innerHeight / 2;
+    gl.viewport(0, 0, cv.width, cv.height);
+  };
+  size();
+  addEventListener("resize", size);
+  let last = 0;
+  const frame = (ms: number) => {
+    if (ms - last > 90) {
+      last = ms;
+      gl.uniform1f(tl, ms % 1000);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+noise();
+
+// Load the OCR engine while the user fills in the form.
+warmUp();

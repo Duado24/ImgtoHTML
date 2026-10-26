@@ -4,10 +4,17 @@
 
 Convert screenshots into local, accessible HTML drafts for Canvas LMS. The original screenshot and resulting HTML must be compared before publication.
 
+## Web version (v2.0)
+
+The `web/` folder holds the TypeScript version: one web page that runs
+entirely in the browser, so colleagues need to install nothing. See
+[web/README.md](web/README.md). The Python version below still works.
+
 ## Project layout
 
 ```text
 imgtohtml/   Application package: converter, desktop UI, and review summary
+web/         TypeScript browser version (v2.0)
 tests/       Unit tests
 docs/        FAQ and project documentation
 README.md    Setup and usage
