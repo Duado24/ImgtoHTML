@@ -2,11 +2,14 @@
  *  words, returns the files to offer for download. The browser parts
  *  (decoding the image, running OCR) live in src/browser/. */
 
-import { blackOrWhite, colorsFromWords, contrast, fixContrast, rgbHex } from "./colors";
+import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
-import { sanitizeLines, sanitizeText } from "./privacy";
-import { render } from "./render";
-import type { Kind, OcrWord, Pixels } from "./types";
+import { colorsUsed, mainColor, measureLooks, paintLines, plainLines, type PaintedLine, type WordLook } from "./paint";
+import { learnedUsernames, sanitizeLines, sanitizeText } from "./privacy";
+import { segment, type Leaf, type Region } from "./regions";
+import { render, renderPanels, type PaintedLeaf } from "./render";
+import { isIconNoise, type Kind, type OcrWord, type Pixels } from "./types";
+import { middle } from "./pymath";
 
 export interface ConvertInput {
   /** Original file name, e.g. "Screenshot 2026-10-23.png". */
@@ -29,13 +32,20 @@ export interface ColorChange {
   contrast_after: number;
 }
 
-/** Same fields as the Python _review.json, plus the colors actually used. */
+/** Same fields as the Python _review.json, plus what the HTML uses. */
 export interface Review {
   type: Kind;
   low_confidence_words: UncertainWord[];
   original_colors: { background: string; foreground: string };
-  rendered_colors: { background: string; foreground: string };
   contrast_changes: ColorChange[];
+  /** The most used text color in the HTML. */
+  text_color: string;
+  /** Every text color in the HTML (measured per word and code token). */
+  colors_used: string[];
+  /** Number of panels rebuilt (interface type), 1 otherwise. */
+  panels: number;
+  /** Short letterless OCR results left out as icons (e.g. "~~", "¢"). */
+  icons_removed: string[];
   second_color_ratio: number;
   check_colors_by_hand: boolean;
   contrast_ratio: number;
@@ -60,6 +70,10 @@ export interface ConvertResult {
   review: Review;
   lineCount: number;
   lowConfidenceCount: number;
+  /** Panels found in the screenshot, whatever type was chosen. */
+  panelsFound: number;
+  /** True when a corrected transcript was used (one color, no panels). */
+  fromTranscript: boolean;
   /** Base for the output file names, e.g. "Screenshot_2026-10-23". */
   stem: string;
   htmlFile: OutputFile;
@@ -68,6 +82,7 @@ export interface ConvertResult {
 }
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(v)));
 
 /** "Photo 1.PNG" → { stem: "Photo 1", suffix: ".png" } (like pathlib). */
 export function splitName(fileName: string): { stem: string; suffix: string } {
@@ -79,6 +94,33 @@ export function splitName(fileName: string): { stem: string; suffix: string } {
 
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
 
+const leaves = (r: Region): Leaf[] => (r.kind === "leaf" ? [r] : r.children.flatMap(leaves));
+
+/** Text size and padding of one panel, from where its words sit. */
+function paintLeaf(pixels: Pixels, leaf: Leaf, looks: ReadonlyMap<OcrWord, WordLook>): PaintedLeaf {
+  const { rows } = layoutWords(leaf.words);
+  const lines = paintLines(rows, leaf.background, looks);
+  const { box, words } = leaf;
+  if (words.length === 0) return { lines, fontSize: 12, padding: { top: 0, right: 0, bottom: 0, left: 0 } };
+
+  // Text size from the height of the small letters (a, e, o…), measured in
+  // the pixels: about 0.53 of the font size in common UI and code fonts.
+  const real = words.filter((w) => /[\p{L}\p{N}]{3}/u.test(w.text));
+  const heights = (real.length ? real : words)
+    .map((w) => xHeight(pixels, w, looks.get(w)?.background ?? leaf.background))
+    .filter((h) => h > 0)
+    .sort((a, b) => a - b);
+  const height = heights.length ? middle(heights) : 6.4;
+  const top = Math.min(...words.map((w) => w.y)) - box.y;
+  const left = Math.min(...words.map((w) => w.x)) - box.x;
+  const bottom = box.y + box.height - Math.max(...words.map((w) => w.y + w.height));
+  return {
+    lines,
+    fontSize: clamp(height / 0.53, 10, 16),
+    padding: { top: clamp(top - 2, 2, 24), right: 8, bottom: clamp(bottom - 2, 2, 24), left: clamp(left, 4, 24) },
+  };
+}
+
 export function convert(input: ConvertInput): ConvertResult {
   const { kind, pixels, animated } = input;
 
@@ -87,22 +129,74 @@ export function convert(input: ConvertInput): ConvertResult {
   let caption = input.caption?.trim() || null;
   const transcript = input.transcript?.trim() ? input.transcript.replace(/\r\n/g, "\n") : null;
 
+  // Privacy first, word by word, so masked text keeps its place and color.
+  // (Paths and email addresses never contain spaces, so they are always
+  // inside one OCR word.)
+  const names = learnedUsernames(input.words.map((w) => w.text));
+  const all = input.words.map((w) => ({ ...w, text: sanitizeText(w.text.trim(), names) }));
+  // Icons can't be reconstructed; left in, they'd show as stray characters.
+  // Also: lone punctuation far from any other text on its line ("]" at a
+  // window edge) is window chrome, not content.
+  const lonely = (w: OcrWord) =>
+    [...w.text].length <= 2 &&
+    !/[\p{L}\p{N}]/u.test(w.text) &&
+    !all.some(
+      (o) => o !== w && Math.abs(o.y - w.y) < w.height && Math.abs(o.x + o.width / 2 - (w.x + w.width / 2)) < 200,
+    );
+  const icon = (w: OcrWord) => isIconNoise(w) || lonely(w);
+  const icons = all.filter(icon);
+  const words = all.filter((w) => !icon(w));
+  const looks = measureLooks(pixels, words);
+
   // OCR always runs, even with a corrected transcript: its word boxes
-  // are where the text color is measured.
-  const ocr = layoutWords(input.words);
-
-  const rawLines = transcript !== null ? transcript.split("\n") : ocr.lines;
-  const rawUncertain = transcript !== null ? [] : ocr.uncertain;
-
-  // Privacy
-  const { lines, names } = sanitizeLines(rawLines);
-  const uncertain = rawUncertain.map((w) => ({ ...w, text: sanitizeText(w.text, names) }));
-
-  // Colors: the box background is pure black or white; the text keeps
-  // the screenshot's color, made lighter or darker only if needed for contrast.
+  // are where colors are measured.
+  const ocr = layoutWords(words);
   const measured = colorsFromWords(pixels, ocr.boxes);
-  const background = blackOrWhite(measured.background);
+  const background = measured.background;
   const foreground = fixContrast(measured.foreground, background);
+  const tree = segment(pixels, words);
+  const panelsFound = leaves(tree).length;
+
+  // Accessibility text
+  if (animated && caption === null) {
+    caption = "Animated in the original. This reconstruction shows the final frame.";
+  }
+  const { stem: rawStem, suffix } = splitName(input.fileName);
+  label ??= `${capitalize(kind)} screenshot showing the content of ${rawStem}`;
+
+  let html: string;
+  let painted: PaintedLine[];
+  let textLines: string[];
+  let uncertain: UncertainWord[];
+  let panels = 1;
+
+  if (transcript !== null) {
+    // Corrected text has no positions, so: one color, one box.
+    textLines = sanitizeLines(transcript.split("\n")).lines;
+    uncertain = [];
+    painted = plainLines(textLines);
+    html = render(painted, kind, label, background, foreground, caption);
+  } else if (kind === "interface" && tree.kind === "split") {
+    textLines = ocr.lines;
+    uncertain = ocr.uncertain;
+    painted = [];
+    html = renderPanels(
+      tree,
+      (leaf) => {
+        const p = paintLeaf(pixels, leaf, looks);
+        painted.push(...p.lines);
+        return p;
+      },
+      label,
+      caption,
+    );
+    panels = panelsFound;
+  } else {
+    textLines = ocr.lines;
+    uncertain = ocr.uncertain;
+    painted = paintLines(ocr.rows, background, looks);
+    html = render(painted, kind, label, background, foreground, caption);
+  }
 
   const colorChanges: ColorChange[] = [];
   if (rgbHex(foreground) !== rgbHex(measured.foreground)) {
@@ -114,15 +208,6 @@ export function convert(input: ConvertInput): ConvertResult {
     });
   }
 
-  // Accessibility text
-  if (animated && caption === null) {
-    caption = "Animated in the original. This reconstruction shows the final frame.";
-  }
-  const { stem: rawStem, suffix } = splitName(input.fileName);
-  label ??= `${capitalize(kind)} screenshot showing the content of ${rawStem}`;
-
-  const html = render(lines, kind, label, background, foreground, caption);
-
   const review: Review = {
     type: kind,
     low_confidence_words: uncertain,
@@ -130,11 +215,11 @@ export function convert(input: ConvertInput): ConvertResult {
       background: rgbHex(measured.background),
       foreground: rgbHex(measured.foreground),
     },
-    rendered_colors: {
-      background: rgbHex(background),
-      foreground: rgbHex(foreground),
-    },
     contrast_changes: colorChanges,
+    text_color: rgbHex((transcript === null && mainColor(painted)) || foreground),
+    colors_used: transcript !== null ? [rgbHex(foreground)] : colorsUsed(painted),
+    panels,
+    icons_removed: transcript !== null ? [] : icons.map((w) => w.text),
     second_color_ratio: round2(measured.secondaryRatio),
     check_colors_by_hand: kind === "code" || measured.secondaryRatio >= 0.3,
     contrast_ratio: round2(contrast(foreground, background)),
@@ -147,25 +232,27 @@ export function convert(input: ConvertInput): ConvertResult {
     limitations: [
       "OCR requires character-by-character review",
       "Whitespace reconstruction is approximate",
-      "Only one foreground color is estimated",
-      "Text color is measured inside OCR word boxes; multi-colored text uses the most common color",
-      "Box background is pure black or white, chosen from the screenshot's background",
+      "Text colors are measured per letter from the screenshot; thin or tiny letters can pick up a blended color",
+      "Colors are raised to 4.5:1 contrast where needed, so some differ slightly from the screenshot",
+      "Panels are found from separator lines; panels without a visible line stay together",
+      "Icons are not reconstructed; OCR may read them as stray characters",
       "Diagram geometry is not reconstructed",
-      "UI controls are not reconstructed",
       "Animated GIFs use their final frame",
       "Username masking is pattern-based and incomplete",
     ],
   };
 
   const stem = rawStem.replace(/[^\p{L}\p{N}_.-]+/gu, "_");
-  const transcriptText = lines.join("\n");
+  const transcriptText = textLines.join("\n");
 
   return {
     html,
     transcript: transcriptText,
     review,
-    lineCount: lines.length,
+    lineCount: textLines.length,
     lowConfidenceCount: uncertain.length,
+    panelsFound,
+    fromTranscript: transcript !== null,
     stem,
     htmlFile: { name: `Media_${stem}${suffix}.html`, mime: "text/html", content: html },
     transcriptFile: { name: `${stem}_transcript.txt`, mime: "text/plain", content: transcriptText },
@@ -187,30 +274,43 @@ export interface Issue {
   words?: string[];
 }
 
-export function issuesFor(review: Review): Issue[] {
+export function issuesFor(result: ConvertResult): Issue[] {
+  const { review } = result;
   const issues: Issue[] = [];
   const words = review.low_confidence_words.map((w) => w.text);
 
   if (words.length) {
     issues.push({ level: "error", text: `${words.length} low-confidence words — check these first.`, words });
   }
-  if (review.check_colors_by_hand) {
+  if (review.type !== "interface" && result.panelsFound > 1 && !result.fromTranscript) {
     issues.push({
       level: "warn",
-      text: "Several text colors in the original; the HTML uses one. Check colors by hand.",
+      text: `This looks like an application window (${result.panelsFound} panels). Choose type UI to rebuild the panels.`,
+    });
+  }
+  if (result.fromTranscript) {
+    issues.push({
+      level: "info",
+      text: "Built from your corrected text: one text color, no panels. Convert without it to get colors and panels back.",
+    });
+  } else if (review.check_colors_by_hand) {
+    issues.push({
+      level: "warn",
+      text: `${review.colors_used.length} text colors measured from the screenshot. Check them against the original.`,
+    });
+  }
+  if (review.icons_removed.length) {
+    issues.push({
+      level: "info",
+      text: `${review.icons_removed.length} icons left out (OCR read them as stray characters).`,
+      words: review.icons_removed,
     });
   }
   const change = review.contrast_changes[0];
   if (change) {
     issues.push({
       level: "info",
-      text: `Text color adjusted from ${change.original} to ${change.adjusted} for contrast.`,
-    });
-  }
-  if (review.rendered_colors.background !== review.original_colors.background) {
-    issues.push({
-      level: "info",
-      text: `Background ${review.original_colors.background} shown as ${review.rendered_colors.background}.`,
+      text: `Main text color adjusted from ${change.original} to ${change.adjusted} for contrast.`,
     });
   }
   return issues;

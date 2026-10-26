@@ -33,10 +33,10 @@ const pack = (r: number, g: number, b: number): number => (r << 16) | (g << 8) |
 const unpack = (n: number): RGB => [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 
 function countRegion(pixels: Pixels, box: Box, counts = new Map<number, number>()) {
-  const x0 = Math.max(0, box.x);
-  const y0 = Math.max(0, box.y);
-  const x1 = Math.min(pixels.width, box.x + box.width);
-  const y1 = Math.min(pixels.height, box.y + box.height);
+  const x0 = Math.max(0, Math.floor(box.x));
+  const y0 = Math.max(0, Math.floor(box.y));
+  const x1 = Math.min(pixels.width, Math.ceil(box.x + box.width));
+  const y1 = Math.min(pixels.height, Math.ceil(box.y + box.height));
   const { data, width } = pixels;
 
   for (let y = y0; y < y1; y++) {
@@ -172,10 +172,146 @@ export function colorsFromWords(pixels: Pixels, boxes: readonly Box[], minContra
   return { background, foreground, secondaryRatio: other / text.get(fgKey)! };
 }
 
-/** The Canvas box background is always pure black or pure white:
- *  whichever is closer to the screenshot's own background. */
-export function blackOrWhite(background: RGB): RGB {
-  return contrast(background, BLACK) <= contrast(background, WHITE) ? BLACK : WHITE;
+export function colorDistance(a: RGB, b: RGB): number {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
+
+export function sameColor(a: RGB | undefined, b: RGB | undefined): boolean {
+  return a === b || (a !== undefined && b !== undefined && a[0] === b[0] && a[1] === b[1] && a[2] === b[2]);
+}
+
+/** Most common color in a box (the whole image when no box is given). */
+export function dominantColor(pixels: Pixels, box: Box = whole(pixels)): RGB {
+  return unpack(mostCommon(countRegion(pixels, box)) ?? 0);
+}
+
+/** Background right around a word: most common color in a `pad`-pixel
+ *  frame just outside its box (inside the box it's mostly letters). */
+export function localBackground(pixels: Pixels, box: Box, pad = 2): RGB {
+  const outer = { x: box.x - pad, y: box.y - pad, width: box.width + 2 * pad, height: box.height + 2 * pad };
+  const counts = new Map<number, number>();
+  countRegion(pixels, { ...outer, height: pad }, counts); // top
+  countRegion(pixels, { ...outer, y: box.y + box.height, height: pad }, counts); // bottom
+  countRegion(pixels, { x: outer.x, y: box.y, width: pad, height: box.height }, counts); // left
+  countRegion(pixels, { x: box.x + box.width, y: box.y, width: pad, height: box.height }, counts); // right
+  const best = mostCommon(counts);
+  return best === undefined ? dominantColor(pixels, box) : unpack(best);
+}
+
+/** Color of the "ink" in a small box (one letter) on a known background:
+ *  the average of the pixels that differ most from the background.
+ *  Averaging cancels ClearType's blue/orange letter edges, which a
+ *  most-common-pixel count would pick up. `weight` = pixels averaged. */
+export function inkColor(
+  pixels: Pixels,
+  box: Box,
+  background: RGB,
+  /** Pixels at least this share of the strongest difference are averaged. */
+  core = 0.7,
+): { color: RGB; weight: number } | undefined {
+  const counts = countRegion(pixels, box);
+  let strongest = 0;
+  for (const key of counts.keys()) strongest = Math.max(strongest, colorDistance(unpack(key), background));
+  if (strongest < 24) return undefined;
+
+  const sum = [0, 0, 0];
+  let weight = 0;
+  for (const [key, count] of counts) {
+    const c = unpack(key);
+    if (colorDistance(c, background) >= core * strongest) {
+      sum[0]! += c[0] * count;
+      sum[1]! += c[1] * count;
+      sum[2]! += c[2] * count;
+      weight += count;
+    }
+  }
+  return { color: [Math.round(sum[0]! / weight), Math.round(sum[1]! / weight), Math.round(sum[2]! / weight)], weight };
+}
+
+/** Height of the small letters (a, e, o…) in a word, in pixels: the band
+ *  of rows where ink is densest. Ascenders and descenders (l, p, g) are
+ *  thin, so their rows are sparse and fall outside the band. */
+export function xHeight(pixels: Pixels, box: Box, background: RGB): number {
+  const x0 = Math.max(0, Math.floor(box.x));
+  const x1 = Math.min(pixels.width, Math.ceil(box.x + box.width));
+  const y0 = Math.max(0, Math.floor(box.y));
+  const y1 = Math.min(pixels.height, Math.ceil(box.y + box.height));
+  const density: number[] = [];
+
+  for (let y = y0; y < y1; y++) {
+    let ink = 0;
+    for (let x = x0; x < x1; x++) {
+      const i = (y * pixels.width + x) * 4;
+      const c: RGB = [pixels.data[i]!, pixels.data[i + 1]!, pixels.data[i + 2]!];
+      if (colorDistance(c, background) > 60) ink++;
+    }
+    density.push(ink);
+  }
+  const peak = Math.max(0, ...density);
+  return peak === 0 ? 0 : density.filter((d) => d >= 0.5 * peak).length;
+}
+
+/** Group similar colors into a small palette, so one text color measured
+ *  on many letters comes out as one color, not dozens of near-copies.
+ *  Returns the palette and, for each sample, its palette entry. */
+export function buildPalette(
+  samples: readonly { color: RGB; weight: number }[],
+  threshold = 30,
+): { palette: RGB[]; assigned: number[] } {
+  type Cluster = { sum: [number, number, number]; weight: number; center: RGB };
+  const clusters: Cluster[] = [];
+  const recenter = (c: Cluster) => {
+    c.center = [Math.round(c.sum[0] / c.weight), Math.round(c.sum[1] / c.weight), Math.round(c.sum[2] / c.weight)];
+  };
+  const nearest = (color: RGB) => {
+    let best = -1;
+    let bestD = Infinity;
+    clusters.forEach((c, i) => {
+      const d = colorDistance(color, c.center);
+      if (d < bestD) [best, bestD] = [i, d];
+    });
+    return { index: best, distance: bestD };
+  };
+
+  // Heaviest samples first, so clusters start at well-measured colors.
+  const order = samples.map((_, i) => i).sort((a, b) => samples[b]!.weight - samples[a]!.weight);
+  for (const i of order) {
+    const { color, weight } = samples[i]!;
+    const { index, distance } = nearest(color);
+    if (index >= 0 && distance <= threshold) {
+      const c = clusters[index]!;
+      c.sum[0] += color[0] * weight;
+      c.sum[1] += color[1] * weight;
+      c.sum[2] += color[2] * weight;
+      c.weight += weight;
+      recenter(c);
+    } else {
+      clusters.push({ sum: [color[0] * weight, color[1] * weight, color[2] * weight], weight, center: color });
+    }
+  }
+
+  return { palette: clusters.map((c) => c.center), assigned: samples.map((s) => nearest(s.color).index) };
+}
+
+/** Text color inside a box on a known background: the most common color
+ *  among the strongest-contrast pixels (anti-aliased edges are blends,
+ *  so they're skipped). Undefined when nothing stands out. */
+export function textColor(pixels: Pixels, box: Box, background: RGB): RGB | undefined {
+  const counts = countRegion(pixels, box);
+  const scored = [...counts].map(([key, count]) => ({ key, count, c: contrast(unpack(key), background) }));
+  const strongest = Math.max(0, ...scored.map((s) => s.c));
+  if (strongest < 1.5) return undefined;
+
+  const threshold = Math.max(1.5, 0.75 * strongest);
+  let best: number | undefined;
+  let bestCount = 0;
+  for (const { key, count, c } of scored) {
+    if (c >= threshold && count > bestCount) {
+      best = key;
+      bestCount = count;
+    }
+  }
+  return best === undefined ? undefined : unpack(best);
 }
 
 // ------------------------------------------------------------

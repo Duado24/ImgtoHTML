@@ -75,6 +75,6 @@ describe("spacing", () => {
   });
 
   it("no words, no lines", () => {
-    expect(layoutWords([])).toEqual({ lines: [], uncertain: [], boxes: [] });
+    expect(layoutWords([])).toEqual({ lines: [], rows: [], uncertain: [], boxes: [] });
   });
 });

@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   BLACK,
   WHITE,
-  blackOrWhite,
   colorsFromWords,
   contrast,
   fixContrast,
   hlsToRgb,
+  localBackground,
   rgbHex,
   rgbToHls,
+  textColor,
 } from "../src/core/colors";
 import type { Box, RGB } from "../src/core/types";
 import { FakeImage } from "./image";
@@ -63,16 +64,22 @@ describe("measured colors", () => {
   });
 });
 
-describe("black or white background", () => {
-  it("dark backgrounds become black", () => {
-    expect(blackOrWhite(gray(0x18))).toEqual(BLACK);
-    expect(blackOrWhite([0x1e, 0x1e, 0x2e])).toEqual(BLACK);
-    expect(blackOrWhite([0x30, 0x0a, 0x24])).toEqual(BLACK); // Ubuntu terminal purple
+describe("colors inside one box", () => {
+  it("text color skips blended edge pixels", () => {
+    const [image, boxes] = screenshot(gray(0x18), [0xdc, 0xdc, 0xaa]);
+    expect(textColor(image, boxes[0]!, gray(0x18))).toEqual([0xdc, 0xdc, 0xaa]);
   });
 
-  it("light backgrounds become white", () => {
-    expect(blackOrWhite(gray(0xf5))).toEqual(WHITE);
-    expect(blackOrWhite([0xfd, 0xf6, 0xe3])).toEqual(WHITE); // Solarized light
+  it("nothing stands out: no text color", () => {
+    const image = new FakeImage(20, 20, gray(0x18));
+    expect(textColor(image, { x: 0, y: 0, width: 20, height: 20 }, gray(0x18))).toBeUndefined();
+  });
+
+  it("local background is the color around a word", () => {
+    const image = new FakeImage(100, 40, gray(0x18));
+    image.fill(10, 5, 60, 30, [0x2a, 0x2d, 0x2e]); // a highlighted row
+    image.fill(20, 12, 40, 22, gray(0xcc)); // its text
+    expect(localBackground(image, { x: 20, y: 12, width: 21, height: 11 })).toEqual([0x2a, 0x2d, 0x2e]);
   });
 });
 

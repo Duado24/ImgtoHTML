@@ -1,4 +1,5 @@
 node_modules/
 dist/
+.claude/
 # Copied from node_modules by `npm install` (scripts/copy-ocr-assets.mjs).
 public/ocr/

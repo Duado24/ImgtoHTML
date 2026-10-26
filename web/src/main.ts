@@ -29,16 +29,23 @@ let lastHTML = "";
 let cache: { file: File; image: Decoded; words: OcrWord[] } | null = null;
 let objectUrls: string[] = [];
 
-/* ── Theme (remembered per browser) ─────────────── */
+/* ── Theme: solid black or solid white. Follows the computer's
+   light/dark setting until the button is used (then remembered). ── */
 const root = document.documentElement;
+const systemTheme = () => (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+let savedTheme: string | null = null;
 try {
-  const t = localStorage.getItem("imgtohtml-theme");
-  if (t) root.dataset.theme = t;
+  savedTheme = localStorage.getItem("imgtohtml-theme");
 } catch {}
+root.dataset.theme = savedTheme ?? systemTheme();
+matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+  if (!savedTheme) root.dataset.theme = systemTheme();
+});
 $("theme").onclick = () => {
-  root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+  savedTheme = root.dataset.theme === "dark" ? "light" : "dark";
+  root.dataset.theme = savedTheme;
   try {
-    localStorage.setItem("imgtohtml-theme", root.dataset.theme);
+    localStorage.setItem("imgtohtml-theme", savedTheme);
   } catch {}
 };
 
@@ -120,7 +127,8 @@ async function run(transcriptText?: string) {
     if (cache?.file !== file) {
       say("Opening the image…");
       const image = await decodeImage(file);
-      const words = await recognizeWords(image.canvas, (step, progress) => {
+      const words = await recognizeWords(image.pixels, (step, progress) => {
+        if (step.startsWith("reading panel")) return say(`Reading ${step.slice(8)}…`);
         const text = STEPS[step] ?? "Working…";
         say(step === "recognizing text" ? `${text} ${Math.round(progress * 100)}%…` : text);
       });
@@ -178,16 +186,18 @@ function show(result: ConvertResult, preview: OutputFile) {
   $("s-low").textContent = String(result.lowConfidenceCount);
   $("s-low").style.color = result.lowConfidenceCount ? "var(--coral)" : "";
   $("s-contrast").textContent = review.contrast_ratio.toFixed(1);
-  const { background, foreground } = review.rendered_colors;
+  const background = review.original_colors.background;
+  const foreground = review.text_color;
+  const others = review.colors_used.length - 1;
   $("sw-bg").style.background = background;
   $("t-bg").textContent = "BG " + background;
   $("sw-fg").style.background = foreground;
-  $("t-fg").textContent = "TEXT " + foreground;
+  $("t-fg").textContent = "TEXT " + foreground + (others > 0 ? ` +${others}` : "");
 
   const list = $("issues");
   list.innerHTML = "";
   const names = { error: "Check", warn: "Warning", info: "Note" } as const;
-  for (const it of issuesFor(review)) {
+  for (const it of issuesFor(result)) {
     const li = document.createElement("li");
     li.className = it.level;
     const tag = document.createElement("span");
@@ -274,54 +284,6 @@ tabs.forEach((t, i) => {
     if (e.key === "ArrowLeft") pick(tabs[(i - 1 + tabs.length) % tabs.length]!);
   };
 });
-
-/* ── Subtle animated noise background (WebGL) ───── */
-function noise() {
-  const cv = $<HTMLCanvasElement>("noise");
-  const gl = cv.getContext("webgl");
-  if (!gl || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-  const vs = "attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}";
-  const fs =
-    "precision mediump float;uniform float t;" +
-    "float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233))+t)*43758.5453);}" +
-    "void main(){float n=h(floor(gl_FragCoord.xy/2.));gl_FragColor=vec4(vec3(n),1.);}";
-  const sh = (type: number, src: string) => {
-    const s = gl.createShader(type)!;
-    gl.shaderSource(s, src);
-    gl.compileShader(s);
-    return s;
-  };
-  const pr = gl.createProgram()!;
-  gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs));
-  gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs));
-  gl.linkProgram(pr);
-  gl.useProgram(pr);
-  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-  const loc = gl.getAttribLocation(pr, "p");
-  gl.enableVertexAttribArray(loc);
-  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-  const tl = gl.getUniformLocation(pr, "t");
-  const size = () => {
-    cv.width = innerWidth / 2;
-    cv.height = innerHeight / 2;
-    gl.viewport(0, 0, cv.width, cv.height);
-  };
-  size();
-  addEventListener("resize", size);
-  let last = 0;
-  const frame = (ms: number) => {
-    if (ms - last > 90) {
-      last = ms;
-      gl.uniform1f(tl, ms % 1000);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    }
-    requestAnimationFrame(frame);
-  };
-  requestAnimationFrame(frame);
-}
-noise();
 
 // Load the OCR engine while the user fills in the form.
 warmUp();

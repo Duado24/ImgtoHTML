@@ -1,8 +1,8 @@
 /* ── Tokens ─────────────────────────────────────────── */
 :root, [data-theme="dark"] {
   --bg: #000000;
-  --panel: #0D0D0C;
-  --panel-2: #121211;
+  --panel: #000000;
+  --panel-2: #000000;
   --line: #24241F;
   --line-strong: #34342E;
   --text: #F2F1E9;
@@ -13,23 +13,21 @@
   --coral: #FF7055;
   --amber: #FDB515;
   --gray: #92928A;
-  --noise-alpha: 0.05;
 }
 [data-theme="light"] {
   --bg: #FFFFFF;
-  --panel: #FBFAF6;
-  --panel-2: #EFECE4;
+  --panel: #FFFFFF;
+  --panel-2: #FFFFFF;
   --line: #DCD8CC;
   --line-strong: #C6C1B2;
   --text: #161614;
   --muted: #5F5F58;
   --accent: #33B04A;
-  --accent-text: #1E7A30;   /* darker green so text passes contrast on ivory */
+  --accent-text: #1E7A30;   /* darker green so text passes contrast on white */
   --on-accent: #060606;
   --coral: #C2381F;
   --amber: #8A5F00;
   --gray: #5F5F58;
-  --noise-alpha: 0.035;
 }
 
 :root {
@@ -44,11 +42,6 @@ body {
   color: var(--text);
   font: 400 14px/1.5 var(--sans);
   min-height: 100vh;
-}
-
-#noise {
-  position: fixed; inset: 0; width: 100%; height: 100%;
-  pointer-events: none; z-index: 0; opacity: var(--noise-alpha);
 }
 
 .shell {
@@ -219,5 +212,4 @@ input[type=text]:focus, textarea:focus { outline: none; border-color: var(--acce
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; }
-  #noise { display: none; }
 }

@@ -10,8 +10,17 @@ export interface UncertainWord {
   confidence: number;
 }
 
+/** A line of text and where each OCR word sits in it. */
+export interface LayoutLine {
+  text: string;
+  /** `start` is the word's index in `text` (UTF-16, as JS strings count). */
+  words: { start: number; word: OcrWord }[];
+}
+
 export interface Layout {
   lines: string[];
+  /** Same lines, with word positions (for coloring). */
+  rows: LayoutLine[];
   uncertain: UncertainWord[];
   /** Every word box, for measuring text color. */
   boxes: Box[];
@@ -30,7 +39,9 @@ export function layoutWords(words: readonly OcrWord[]): Layout {
     }
 
     const key = `${raw.block}/${raw.paragraph}/${raw.line}`;
-    const word = { ...raw, text };
+    // Keep the caller's object when nothing changes, so it can be used
+    // as a key (convert() looks up each word's measured colors).
+    const word = text === raw.text ? raw : { ...raw, text };
     const group = groups.get(key);
     if (group) group.push(word);
     else groups.set(key, [word]);
@@ -45,7 +56,7 @@ export function layoutWords(words: readonly OcrWord[]): Layout {
     row.map(({ x, y, width, height }) => ({ x, y, width, height })),
   );
 
-  if (rows.length === 0) return { lines: [], uncertain, boxes };
+  if (rows.length === 0) return { lines: [], rows: [], uncertain, boxes };
 
   const all = rows.flat();
   const byNumber = (a: number, b: number) => a - b;
@@ -72,7 +83,7 @@ export function layoutWords(words: readonly OcrWord[]): Layout {
     .sort(byNumber);
   const spaceExtra = gaps.length >= 5 ? Math.max(0, middle(gaps) - 1) : 0;
 
-  const lines: string[] = [];
+  const out: LayoutLine[] = [];
   let previousY: number | undefined;
 
   for (const row of sortedRows) {
@@ -81,12 +92,13 @@ export function layoutWords(words: readonly OcrWord[]): Layout {
     if (previousY !== undefined) {
       const missing = pyRound((y - previousY) / lineHeight) - 1;
       const blankLines = Math.max(0, Math.min(12, missing));
-      for (let i = 0; i < blankLines; i++) lines.push("");
+      for (let i = 0; i < blankLines; i++) out.push({ text: "", words: [] });
     }
     previousY = y;
 
     let line = "";
     let lastEnd: number | undefined;
+    const placed: LayoutLine["words"] = [];
 
     for (const word of row) {
       if (lastEnd === undefined) {
@@ -95,12 +107,13 @@ export function layoutWords(words: readonly OcrWord[]): Layout {
         const gap = (word.x - lastEnd) / charWidth;
         line += " ".repeat(Math.max(1, pyRound(gap - spaceExtra)));
       }
+      placed.push({ start: line.length, word });
       line += word.text;
       lastEnd = word.x + word.width;
     }
 
-    lines.push(line);
+    out.push({ text: line, words: placed });
   }
 
-  return { lines, uncertain, boxes };
+  return { lines: out.map((l) => l.text), rows: out, uncertain, boxes };
 }

@@ -56,15 +56,38 @@ tests/         Unit tests
 scripts/       Copies the OCR files out of node_modules
 ```
 
+## How a screenshot is read
+
+1. **OCR preprocessing** (`core/preprocess.ts`): each pixel becomes "how
+   different is it from the background", so any text color on any
+   background turns into dark print on white, then the image is enlarged
+   3×. Tesseract is trained on print; small light-on-dark text was the main
+   cause of misreads.
+2. **Panels** (`core/regions.ts`): thin separator lines that run the full
+   length of an area (sidebar border, tab bar border, terminal border) split
+   the screenshot into panels. Then each panel is read again on its own,
+   and each panel keeps whichever reading is more confident.
+3. **Colors** (`core/paint.ts`): background per panel, highlights per word
+   (selected file, active tab), and text color per word and per code token
+   (`print`, `(`, `"Hello"`), measured from the pixels. Thin letters are
+   corrected for blending, near-grays become true grays, and every color is
+   checked for 4.5:1 contrast against what it sits on.
+4. **HTML** (`core/render.ts`): type **UI** rebuilds the panels as nested
+   boxes (side-by-side panels wrap under each other on phones); other types
+   give one box. Inline styles only, no `<pre>`, one `<div>` per line.
+
 ## Changes from the Python version (v1.2.6)
 
 - Runs in the browser; files are downloaded instead of written to `out/`.
-- The box background is always **pure black or pure white**, whichever is
-  closer to the screenshot's background. The text color is still measured
-  from the screenshot and only adjusted if contrast is below 4.5:1. The
-  review JSON lists both the original and the rendered colors.
+- OCR preprocessing and a second, per-panel OCR pass (see above).
+- Type UI rebuilds application panels; all types keep text colors per word
+  and code token (Python used one color).
+- Icons (◆ ⊘ ⌄) can't be reconstructed. OCR reads them as stray characters
+  like `¢` or `~~`; those are left out and listed in the review.
+- The page itself is solid black (dark mode) or solid white (light mode),
+  following the computer's setting until the button is used.
 - OCR is Tesseract.js (same engine, compiled for the browser). Results can
   differ slightly from the Python version's; check them the same way.
 - TIFF is not accepted (most browsers can't open it).
-- Spacing, privacy masking and HTML output follow the Python rules exactly,
-  including Python's rounding.
+- Spacing and privacy masking follow the Python rules, including Python's
+  rounding.
