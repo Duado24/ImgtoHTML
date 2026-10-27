@@ -6,7 +6,7 @@ import { checkCanvasSafe, type CanvasIssue } from "./canvas";
 import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
 import { buildModel, flagsByRegion, type ReviewState, type ScreenshotModel } from "./model";
-import { cleanCode, detectLanguage, highlightCode } from "./code";
+import { cleanCode, detectLanguage, highlightCode, type CodeCleanup } from "./code";
 import { renderDiagram, unconfirmedLabels, type Diagram } from "./diagram";
 import { colorRoles } from "./terminal";
 import { mergeVision, type RegionReading } from "./vision";
@@ -63,7 +63,7 @@ export interface Review {
   /** Regions with flagged text, least confident first (details in the model file). */
   regions_to_review: { region: string; confidence: number | null; flags: number }[];
   /** Code screenshots: detected language and the clean-up applied to the OCR text. */
-  code: { language: string | null; line_numbers_removed: boolean; lines_outside_code: number; indent_unit: number | null; lines_snapped: number } | null;
+  code: { language: string | null; line_numbers_removed: boolean; lines_outside_code: number; panels_left_out: number; quotes_straightened: number; indent_unit: number | null; lines_snapped: number } | null;
   /** Diagrams described by the vision model: size, and labels OCR didn't confirm. */
   diagram: { parts: number; connections: number; unconfirmed_labels: string[] } | null;
   /** The vision model that also read the screenshot, or null when none ran. */
@@ -146,6 +146,19 @@ function paintLeaf(pixels: Pixels, leaf: Leaf, looks: ReadonlyMap<OcrWord, WordL
   };
 }
 
+/** The panel holding the code: the one whose lines have the most gutter
+ *  numbers, else the one with the most words. */
+function editorPanel(tree: Region): { leaf: Leaf; cleaned: CodeCleanup } {
+  const panels = leaves(tree).map((leaf) => ({ leaf, cleaned: cleanCode(layoutWords(leaf.words).lines) }));
+  const rank = (p: (typeof panels)[number]): [number, number] =>
+    [p.cleaned.lineNumbersRemoved ? 1 : 0, p.cleaned.lineNumbersRemoved ? p.cleaned.lines.length : p.leaf.words.length];
+  return panels.reduce((best, p) => {
+    const [a, b] = rank(p);
+    const [c, d] = rank(best);
+    return a > c || (a === c && b > d) ? p : best;
+  });
+}
+
 export function convert(input: ConvertInput): ConvertResult {
   const { kind, pixels, animated } = input;
 
@@ -203,10 +216,12 @@ export function convert(input: ConvertInput): ConvertResult {
 
   if (kind === "code" && theme) {
     // Code is re-highlighted by language rather than painted from pixels.
-    // A corrected transcript is used as typed; OCR text is cleaned first.
-    const cleaned = transcript === null ? cleanCode(ocr.lines) : null;
+    // A corrected transcript is used as typed; OCR text is cleaned first,
+    // from the editor panel only (not the sidebar or terminal beside it).
+    const editor = transcript === null ? editorPanel(tree) : null;
+    const cleaned = editor?.cleaned ?? null;
     textLines = cleaned?.lines ?? sanitizeLines(transcript!.split("\n")).lines;
-    uncertain = transcript === null ? ocr.uncertain : [];
+    uncertain = editor ? layoutWords(editor.leaf.words).uncertain : [];
     const language = detectLanguage(textLines.join("\n"));
     painted = highlightCode(textLines.join("\n"), language, theme);
     html = render(painted, kind, label, boxBackground, boxText, caption);
@@ -214,6 +229,8 @@ export function convert(input: ConvertInput): ConvertResult {
       language,
       line_numbers_removed: cleaned?.lineNumbersRemoved ?? false,
       lines_outside_code: cleaned?.linesOutsideCode ?? 0,
+      panels_left_out: editor ? panelsFound - 1 : 0,
+      quotes_straightened: cleaned?.quotesStraightened ?? 0,
       indent_unit: cleaned?.indentUnit ?? null,
       lines_snapped: cleaned?.linesSnapped ?? 0,
     };
@@ -431,13 +448,14 @@ export function issuesFor(result: ConvertResult): Issue[] {
     issues.push({ level: "warn", text: "Diagram structure needs the vision model; this is only the text OCR found." });
   }
   if (review.code) {
-    const { language, line_numbers_removed, lines_outside_code, indent_unit, lines_snapped } = review.code;
+    const { language, line_numbers_removed, lines_outside_code, panels_left_out, quotes_straightened, indent_unit, lines_snapped } = review.code;
+    const lines = (n: number) => `${n} ${n === 1 ? "line" : "lines"}`;
     const notes = [
       language ? `Highlighted as ${language === "xml" ? "HTML/XML" : language}` : "Language not recognized; shown without syntax colors",
+      ...(panels_left_out ? [`only the code panel is used (${panels_left_out} other ${panels_left_out === 1 ? "panel" : "panels"} such as the sidebar left out)`] : []),
       ...(line_numbers_removed ? ["line numbers removed so copied code runs"] : []),
-      ...(lines_outside_code
-        ? [`${lines_outside_code} editor ${lines_outside_code === 1 ? "line" : "lines"} around the code left out (tabs, breadcrumbs)`]
-        : []),
+      ...(lines_outside_code ? [`${lines(lines_outside_code)} of editor text left out (tabs, breadcrumbs, hints)`] : []),
+      ...(quotes_straightened ? [`curly quotes made straight on ${lines(quotes_straightened)}`] : []),
       ...(lines_snapped ? [`indentation of ${lines_snapped} ${lines_snapped === 1 ? "line" : "lines"} snapped to ${indent_unit} spaces — check it`] : []),
     ];
     issues.push({ level: lines_snapped ? "warn" : "info", text: notes.join("; ") + "." });

@@ -55,8 +55,10 @@ export interface CodeCleanup {
   lines: string[];
   /** Gutter numbers taken off the start of lines (so copying gives clean code). */
   lineNumbersRemoved: boolean;
-  /** Editor lines above or below the numbered code (tabs, breadcrumbs) that were left out. */
+  /** Editor lines left out: above or below the numbered code (tabs, breadcrumbs) or hints between lines. */
   linesOutsideCode: number;
+  /** Lines where curly quotes (OCR misreads) became straight ones. */
+  quotesStraightened: number;
   /** Indentation step the lines were snapped to (2 or 4), or null. */
   indentUnit: number | null;
   /** Lines whose indentation was off by one space and moved to the step. */
@@ -85,9 +87,16 @@ function stripGutter(lines: readonly string[]): { lines: string[]; removed: bool
   }
   // Where the code starts: the narrowest gutter among numbered lines whose
   // code starts like code (a misread such as "13 |" must not move it).
-  const column = Math.min(...numbered.filter((x) => x.code && /^[\p{L}\p{N}_#"'@([{<\/.]/u.test(lines[x.i]!.slice(x.prefix))).map((x) => x.prefix));
+  const codeLike = numbered.filter((x) => x.code && /^[\p{L}\p{N}_#"'“”‘’@([{}\]<\/.]/u.test(lines[x.i]!.slice(x.prefix)));
+  const column = Math.min(...(codeLike.length ? codeLike : numbered.filter((x) => x.code)).map((x) => x.prefix));
   const first = numbered[0]!.i;
   const last = numbered.at(-1)!.i;
+  // A line between two consecutive numbers (6, "Debug", 7) is an editor hint, not code.
+  const hint = new Set<number>();
+  for (let k = 1; k < numbered.length; k++) {
+    if (numbered[k]!.n !== numbered[k - 1]!.n + 1) continue;
+    for (let i = numbered[k - 1]!.i + 1; i < numbered[k]!.i; i++) if (lines[i]!.trim()) hint.add(i);
+  }
   const cut = (l: string) => {
     const m = GUTTER.exec(l) ?? MISREAD.exec(l);
     if (!m) return l;
@@ -97,9 +106,9 @@ function stripGutter(lines: readonly string[]): { lines: string[]; removed: bool
     return l;
   };
   return {
-    lines: lines.slice(first, last + 1).map(cut),
+    lines: lines.slice(first, last + 1).flatMap((l, k) => (hint.has(first + k) ? [] : [cut(l)])),
     removed: true,
-    outside: lines.slice(0, first).filter((l) => l.trim()).length + lines.slice(last + 1).filter((l) => l.trim()).length,
+    outside: lines.slice(0, first).filter((l) => l.trim()).length + lines.slice(last + 1).filter((l) => l.trim()).length + hint.size,
   };
 }
 
@@ -131,8 +140,11 @@ function snapIndent(lines: readonly string[]): { lines: string[]; unit: number |
 export function cleanCode(lines: readonly string[]): CodeCleanup {
   const gutter = stripGutter(lines);
   const indent = snapIndent(gutter.lines);
+  // Editors show straight quotes; curly ones in code are OCR misreads.
+  const straight = indent.lines.map((l) => l.replace(/[“”„]/g, '"').replace(/[‘’]/g, "'"));
   return {
-    lines: indent.lines,
+    lines: straight,
+    quotesStraightened: straight.filter((l, i) => l !== indent.lines[i]).length,
     lineNumbersRemoved: gutter.removed,
     linesOutsideCode: gutter.outside,
     indentUnit: indent.unit,
@@ -153,6 +165,10 @@ const MARKERS: [string, RegExp][] = [
 
 /** The language highlight.js finds most likely, or null when nothing fits well. */
 export function detectLanguage(code: string): string | null {
+  // JSON: most non-empty lines are `"key": value` pairs or brackets.
+  const filled = code.split("\n").filter((l) => l.trim());
+  const pairs = filled.filter((l) => /^\s*"[^"]+"\s*:/.test(l)).length;
+  if (pairs >= 3 && pairs >= filled.length * 0.5) return "json";
   const marked = MARKERS.find(([, pattern]) => pattern.test(code));
   if (marked) return marked[0];
   const best = hljs.highlightAuto(code, Object.keys(LANGUAGES));

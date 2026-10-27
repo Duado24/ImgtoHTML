@@ -28,6 +28,12 @@ describe("cleanCode", () => {
     expect(out.lines).toEqual(["import time", "x = 1", "", "while True:", "    if x:", "        print(x)", "        x = 0", "", "    time.sleep(1)"]);
   });
 
+  it("drops editor hints between consecutive line numbers and straightens curly quotes", () => {
+    const out = cleanCode(["  5    “type”: “module”,", "       Debug", "  6    “scripts”: {", "  7      “app”: ‘x’", "  8    }"]);
+    expect(out).toMatchObject({ linesOutsideCode: 1, quotesStraightened: 3 });
+    expect(out.lines).toEqual(['"type": "module",', '"scripts": {', `  "app": 'x'`, "}"]);
+  });
+
   it("leaves numbers that are code, not a gutter", () => {
     const out = cleanCode(["x = 1", "10 + 5", "print(x)"]);
     expect(out.lineNumbersRemoved).toBe(false);
@@ -50,6 +56,7 @@ describe("detectLanguage", () => {
   it.each([
     ["python", "def main():\n    for i in range(10):\n        print(f'{i}')\n\nif __name__ == '__main__':\n    main()"],
     ["java", "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hi\");\n    }\n}"],
+    ["json", 't\n  "name": "web",\n  "private": true,\n  "scripts": {\n    "app": "bash start.sh"\n  },\nb'],
     ["javascript", "const items = [1, 2];\nfunction total(list) {\n  return list.reduce((a, b) => a + b, 0);\n}\nconsole.log(total(items));"],
   ])("recognizes %s", (language, code) => {
     expect(detectLanguage(code)).toBe(language);
