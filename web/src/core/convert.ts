@@ -6,6 +6,8 @@ import { checkCanvasSafe, type CanvasIssue } from "./canvas";
 import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
 import { buildModel, flagsByRegion, type ReviewState, type ScreenshotModel } from "./model";
+import { cleanCode, detectLanguage, highlightCode } from "./code";
+import { renderDiagram, unconfirmedLabels, type Diagram } from "./diagram";
 import { colorRoles } from "./terminal";
 import { mergeVision, type RegionReading } from "./vision";
 import { applyTheme, themeFor } from "./theme";
@@ -60,6 +62,10 @@ export interface Review {
   canvas_issues: CanvasIssue[];
   /** Regions with flagged text, least confident first (details in the model file). */
   regions_to_review: { region: string; confidence: number | null; flags: number }[];
+  /** Code screenshots: detected language and the clean-up applied to the OCR text. */
+  code: { language: string | null; line_numbers_removed: boolean; lines_outside_code: number; indent_unit: number | null; lines_snapped: number } | null;
+  /** Diagrams described by the vision model: size, and labels OCR didn't confirm. */
+  diagram: { parts: number; connections: number; unconfirmed_labels: string[] } | null;
   /** The vision model that also read the screenshot, or null when none ran. */
   vision: { model: string; regions_read: number; error?: string } | null;
   privacy: {
@@ -80,6 +86,9 @@ export interface OutputFile {
 export interface ConvertResult {
   html: string;
   transcript: string;
+  /** Screen-reader label and visible caption as used (defaults filled in). */
+  label: string;
+  caption: string | null;
   review: Review;
   lineCount: number;
   lowConfidenceCount: number;
@@ -190,8 +199,25 @@ export function convert(input: ConvertInput): ConvertResult {
   let textLines: string[];
   let uncertain: UncertainWord[];
   let panels = 1;
+  let code: Review["code"] = null;
 
-  if (transcript !== null) {
+  if (kind === "code" && theme) {
+    // Code is re-highlighted by language rather than painted from pixels.
+    // A corrected transcript is used as typed; OCR text is cleaned first.
+    const cleaned = transcript === null ? cleanCode(ocr.lines) : null;
+    textLines = cleaned?.lines ?? sanitizeLines(transcript!.split("\n")).lines;
+    uncertain = transcript === null ? ocr.uncertain : [];
+    const language = detectLanguage(textLines.join("\n"));
+    painted = highlightCode(textLines.join("\n"), language, theme);
+    html = render(painted, kind, label, boxBackground, boxText, caption);
+    code = {
+      language,
+      line_numbers_removed: cleaned?.lineNumbersRemoved ?? false,
+      lines_outside_code: cleaned?.linesOutsideCode ?? 0,
+      indent_unit: cleaned?.indentUnit ?? null,
+      lines_snapped: cleaned?.linesSnapped ?? 0,
+    };
+  } else if (transcript !== null) {
     // Corrected text has no positions, so: one color, one box.
     textLines = sanitizeLines(transcript.split("\n")).lines;
     uncertain = [];
@@ -250,6 +276,8 @@ export function convert(input: ConvertInput): ConvertResult {
     canvas_issues: checkCanvasSafe(html),
     regions_to_review: regionsToReview(model),
     vision: null,
+    code,
+    diagram: null,
     privacy: {
       home_path_masking: true,
       learned_email_identity_masking: true,
@@ -275,6 +303,8 @@ export function convert(input: ConvertInput): ConvertResult {
   return {
     html,
     transcript: transcriptText,
+    label,
+    caption,
     review,
     lineCount: textLines.length,
     lowConfidenceCount: uncertain.length,
@@ -315,6 +345,27 @@ export function addVision(result: ConvertResult, model: string, readings: readon
     model: merged,
     reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) },
     modelFile: { ...result.modelFile, content: JSON.stringify(merged, null, 2) },
+  };
+}
+
+/** Diagrams: replace the OCR text box with the vision model's description. */
+export function addDiagram(result: ConvertResult, diagram: Diagram): ConvertResult {
+  const html = renderDiagram(diagram, result.label, result.caption);
+  const review: Review = {
+    ...result.review,
+    canvas_issues: checkCanvasSafe(html),
+    diagram: {
+      parts: diagram.nodes.length,
+      connections: diagram.edges.length,
+      unconfirmed_labels: unconfirmedLabels(diagram, result.transcript),
+    },
+  };
+  return {
+    ...result,
+    html,
+    review,
+    htmlFile: { ...result.htmlFile, content: html },
+    reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) },
   };
 }
 
@@ -363,6 +414,33 @@ export function issuesFor(result: ConvertResult): Issue[] {
   }
   if (review.vision?.error) {
     issues.push({ level: "warn", text: `Vision model didn't run (${review.vision.error}); OCR only.` });
+  }
+  if (review.diagram) {
+    issues.push({
+      level: "info",
+      text: `Diagram described as ${review.diagram.parts} parts and ${review.diagram.connections} connections. Upload the image to Canvas and put this description with it.`,
+    });
+    if (review.diagram.unconfirmed_labels.length) {
+      issues.push({
+        level: "warn",
+        text: "The vision model read these labels, but OCR didn't see them — check them against the image.",
+        words: review.diagram.unconfirmed_labels,
+      });
+    }
+  } else if (review.type === "diagram") {
+    issues.push({ level: "warn", text: "Diagram structure needs the vision model; this is only the text OCR found." });
+  }
+  if (review.code) {
+    const { language, line_numbers_removed, lines_outside_code, indent_unit, lines_snapped } = review.code;
+    const notes = [
+      language ? `Highlighted as ${language === "xml" ? "HTML/XML" : language}` : "Language not recognized; shown without syntax colors",
+      ...(line_numbers_removed ? ["line numbers removed so copied code runs"] : []),
+      ...(lines_outside_code
+        ? [`${lines_outside_code} editor ${lines_outside_code === 1 ? "line" : "lines"} around the code left out (tabs, breadcrumbs)`]
+        : []),
+      ...(lines_snapped ? [`indentation of ${lines_snapped} ${lines_snapped === 1 ? "line" : "lines"} snapped to ${indent_unit} spaces — check it`] : []),
+    ];
+    issues.push({ level: lines_snapped ? "warn" : "info", text: notes.join("; ") + "." });
   }
   const disagree = pending.filter((f) => f.reason === "sources-disagree");
   if (disagree.length) {

@@ -82,12 +82,16 @@ describe("convert", () => {
     expect(review.colors_used).toEqual(expect.arrayContaining(["#cccccc", "#dcdcaa"]));
   });
 
-  it("code uses the course theme, keeping which letters differ", () => {
+  it("code uses the course theme and is highlighted by language", () => {
     const { pixels, words } = editor();
-    const { html, review } = convert({ fileName: "a.png", pixels, words, animated: false, kind: "code" });
+    const transcript = "def greet(name):\n    # say hello\n    return f\"Hello {name}\"\n\nprint(greet('class'))";
+    const { html, review } = convert({ fileName: "a.png", pixels, words, animated: false, kind: "code", transcript });
     expect(review.theme).toBe("vscode-dark-code");
+    expect(review.code?.language).toBe("python");
     expect(html).toContain("background-color:#1e1e1e;color:#d4d4d4;");
-    expect(html).toContain('<span style="color:#dcdcaa;">print</span>(');
+    expect(html).toContain('<span style="color:#569cd6;">def</span>');
+    expect(html).toContain('<span style="color:#dcdcaa;">greet</span>');
+    expect(html).toContain('<span style="color:#6a9955;"># say hello</span>');
     expect(review.contrast_changes).toEqual([]);
     expect(review.check_colors_by_hand).toBe(false);
   });

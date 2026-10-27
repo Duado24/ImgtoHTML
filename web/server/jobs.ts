@@ -3,7 +3,8 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { addVision, applyDecisions, convert, previewPage, type ConvertInput, type ConvertResult } from "../src/core/convert";
+import { addDiagram, addVision, applyDecisions, convert, previewPage, type ConvertInput, type ConvertResult } from "../src/core/convert";
+import type { Diagram } from "../src/core/diagram";
 import type { ReviewState } from "../src/core/model";
 import type { Box, OcrWord } from "../src/core/types";
 import { cropPixels } from "../src/core/preprocess";
@@ -36,6 +37,8 @@ interface Session {
   image: DecodedImage;
   words: OcrWord[];
   readings: Reading[];
+  /** Diagrams: the vision model's parts and connections. */
+  diagram?: Diagram;
   visionError?: string;
   decisions: Map<string, ReviewState>;
   /** Regions with a word the reviewer changed (approving them records "corrected"). */
@@ -101,6 +104,7 @@ export class Jobs {
       });
       result = addVision(result, this.vision.name, readings, session.visionError);
     }
+    if (session.diagram && !input.transcript?.trim()) result = addDiagram(result, session.diagram);
     result = applyDecisions(result, session.decisions);
     const imageDataUrl = `data:image/png;base64,${image.png.toString("base64")}`;
     return { ...result, imageDataUrl, preview: previewPage(result, imageDataUrl) };
@@ -146,6 +150,10 @@ export class Jobs {
         const regions = first.model.regions.filter((r) => r.lines.length).map(({ id, box }) => ({ id, box }));
         try {
           session.readings = await this.readVision(session, regions);
+          if (input.kind === "diagram" && this.vision.describeDiagram) {
+            progress("Describing the diagram…");
+            session.diagram = await this.vision.describeDiagram(image.pixels);
+          }
         } catch (error) {
           session.visionError = message(error);
         }
