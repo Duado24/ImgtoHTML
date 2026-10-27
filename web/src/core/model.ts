@@ -7,11 +7,13 @@
 import { rgbHex } from "./colors";
 import { layoutWords } from "./layout";
 import type { Leaf, Region } from "./regions";
+import { classifyLine, suggestFix, type LineRole } from "./terminal";
 import type { Box, Kind, OcrWord } from "./types";
 
 export const MODEL_VERSION = 1;
 
-export type Source = "ocr" | "vision" | "user";
+/** "rule": a fix suggested by a known pattern (e.g. "1s" → "ls" in a command). */
+export type Source = "ocr" | "vision" | "user" | "rule";
 
 /** Where a region stands in the review loop. */
 export type ReviewState = "pending" | "approved" | "corrected" | "skipped";
@@ -34,10 +36,14 @@ export interface Span extends Reading {
 export interface ModelLine {
   id: string;
   box: Box;
+  /** Terminals only: command (after a prompt), output or error. */
+  role?: LineRole;
+  /** Terminals only: the prompt text at the start of a command line. */
+  prompt?: string;
   spans: Span[];
 }
 
-export type FlagReason = "low-confidence" | "confusable" | "sources-disagree";
+export type FlagReason = "low-confidence" | "confusable" | "suggested-fix" | "sources-disagree";
 
 export interface Flag {
   reason: FlagReason;
@@ -96,6 +102,9 @@ function buildRegion(id: string, box: Box, background: string, words: readonly O
   for (const [i, row] of layoutWords(words).rows.entries()) {
     if (!row.words.length) continue;
     const lineId = `${id}.l${i + 1}`;
+    const terminal = kind === "terminal" ? classifyLine(row.text.trimStart()) : null;
+    const promptEnd = terminal ? row.text.length - row.text.trimStart().length + terminal.prompt.length : 0;
+    const firstCommand = row.words.findIndex((w) => w.start >= promptEnd);
     const spans = row.words.map(({ word }, j): Span => {
       const confidence = word.confidence < 0 ? null : round3(word.confidence / 100);
       const span: Span = {
@@ -111,9 +120,15 @@ function buildRegion(id: string, box: Box, background: string, words: readonly O
       } else if (strict && LOOKALIKES.test(word.text) && (confidence === null || confidence < CONFUSABLE_CONFIDENCE)) {
         flags.push({ reason: "confusable", spanId: span.id, detail: `Check lookalike characters in "${word.text}"` });
       }
+      const fix = terminal?.role === "command" && firstCommand >= 0 && j >= firstCommand ? suggestFix(word.text, j === firstCommand) : null;
+      if (fix) {
+        span.alternatives.push({ source: "rule", text: fix.to, confidence: null });
+        flags.push({ reason: "suggested-fix", spanId: span.id, detail: `"${fix.from}" → "${fix.to}": ${fix.why}` });
+      }
       return span;
     });
-    lines.push({ id: lineId, box: union(spans.map((s) => s.box)), spans });
+    const roles = terminal ? { role: terminal.role, ...(terminal.prompt ? { prompt: terminal.prompt } : {}) } : {};
+    lines.push({ id: lineId, box: union(spans.map((s) => s.box)), ...roles, spans });
   }
 
   const spans = lines.flatMap((l) => l.spans).filter((s) => s.confidence !== null);

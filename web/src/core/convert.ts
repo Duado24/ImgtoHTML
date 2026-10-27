@@ -6,6 +6,7 @@ import { checkCanvasSafe, type CanvasIssue } from "./canvas";
 import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
 import { buildModel, flagsByRegion, type ScreenshotModel } from "./model";
+import { colorRoles } from "./terminal";
 import { applyTheme, themeFor } from "./theme";
 import { colorsUsed, mainColor, measureLooks, paintLines, plainLines, type PaintedLine, type WordLook } from "./paint";
 import { learnedUsernames, sanitizeLines, sanitizeText } from "./privacy";
@@ -213,6 +214,7 @@ export function convert(input: ConvertInput): ConvertResult {
     uncertain = ocr.uncertain;
     painted = paintLines(ocr.rows, background, looks);
     if (theme) painted = applyTheme(painted, theme, measured.foreground, background);
+    if (theme && kind === "terminal") painted = colorRoles(painted, theme);
     html = render(painted, kind, label, boxBackground, boxText, caption);
   }
 
@@ -304,6 +306,14 @@ export function issuesFor(result: ConvertResult): Issue[] {
 
   if (words.length) {
     issues.push({ level: "error", text: `${words.length} low-confidence words — check these first.`, words });
+  }
+  const fixes = result.model.regions.flatMap((r) => r.flags).filter((f) => f.reason === "suggested-fix");
+  if (fixes.length) {
+    issues.push({
+      level: "error",
+      text: `${fixes.length} likely misread ${fixes.length === 1 ? "command" : "commands"} — check before students copy them.`,
+      words: fixes.map((f) => f.detail),
+    });
   }
   for (const canvas of review.canvas_issues) {
     issues.push({ level: canvas.level === "error" ? "error" : "warn", text: `Canvas: ${canvas.message}.` });
