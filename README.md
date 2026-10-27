@@ -1,123 +1,112 @@
-# AutoCanv — Screenshot to Canvas HTML
+# ImgtoHTML — local screenshot to Canvas HTML
 
-## Purpose
+The main application is TypeScript in [web/](web/README.md). A small Node
+server performs image decoding and OCR on this computer; the existing browser
+UI displays the draft and offers downloads. The server binds only to
+**127.0.0.1**. Conversion uses no external services, network models or CDNs.
 
-Convert screenshots into local, accessible HTML drafts for Canvas LMS. The original screenshot and resulting HTML must be compared before publication.
+Compare the original screenshot with the draft before publishing it in Canvas.
+OCR, whitespace reconstruction and identity masking still require review.
 
-## Web version (v2.0)
+## Install
 
-The `web/` folder holds the TypeScript version: one web page that runs
-entirely in the browser, so colleagues need to install nothing. See
-[web/README.md](web/README.md). The Python version below still works.
+Install **Node 20.19+ or 22.12+** (including newer even-numbered releases) and npm.
+Install **Tesseract OCR with English language data**, and put tesseract on PATH.
+For Ubuntu / WSL:
 
-## Project layout
+    sudo apt-get update
+    sudo apt-get install tesseract-ocr tesseract-ocr-eng
+    node --version
+    tesseract --version
+    tesseract --list-langs
 
-```text
-imgtohtml/   Application package: converter, desktop UI, and review summary
-web/         TypeScript browser version (v2.0)
-tests/       Unit tests
-docs/        FAQ and project documentation
-README.md    Setup and usage
-requirements.txt
-```
+On macOS, `brew install tesseract` supplies the CLI. On Windows, install a
+Tesseract distribution and add its installation directory to PATH, or use WSL.
+If the executable is absent, the app automatically uses Tesseract.js **on the
+server**, with the English data installed by npm. Python is not required.
 
-## Installation
+    cd web
+    npm ci
 
-Install Python 3 and Tesseract OCR, then run:
+Dependency installation needs network access. After installation, both OCR
+engines and the application operate locally, including the first conversion.
 
-```bash
-python -m pip install -r requirements.txt
-```
+## Run
 
-## Usage
+For development, start the server and Vite together:
 
-Run the command-line converter with:
+    cd web
+    npm run dev
 
-```bash
-python -m imgtohtml.screenshot_to_canvas example.gif --type terminal
-```
+Open **http://127.0.0.1:5173**. Vite forwards /api requests to the local Node
+server on port 3000. Both listeners bind to 127.0.0.1.
 
-Launch the desktop interface with:
+For normal use, build once and serve the client and API together:
 
-```bash
-python -m imgtohtml.ui
-```
+    cd web
+    npm run build
+    npm start
 
-The converter also supports `code`, `interface`, and `diagram` types:
+Open **http://127.0.0.1:3000**. Stop with Ctrl+C. Do not run dev and start
+at the same time: they use the same API port.
 
-```bash
-python -m imgtohtml.screenshot_to_canvas example.png --type code
-```
-
-Provide a meaningful description:
-
-```bash
-python -m imgtohtml.screenshot_to_canvas example.gif --label "Terminal showing output from a Python program"
-```
-
-Use a corrected transcript:
-
-```bash
-python -m imgtohtml.screenshot_to_canvas example.gif --transcript out/example_transcript.txt
-```
-
-## Tests
-
-Run the unit test suite from the project root:
-
-```bash
-python -m unittest discover -v
-```
-
-See [docs/FAQ.md](docs/FAQ.md) for feature and limitation details.
-
-## Version 1.1 changes
-
-- Estimates original foreground and background colors from screenshot pixels.
-- Adjusts estimated foreground lightness if contrast is below 4.5:1.
-- Logs color adjustments in the JSON review report.
-- Estimates blank lines and indentation from OCR coordinates.
-- Masks common usernames in paths and email-like identities.
-- Removes automatically inserted visible headings.
-- Adds a caption when an animated GIF is processed.
-- Keeps long code lines inside a horizontally scrollable code panel.
-- Preserves source extensions in generated HTML filenames.
-- Produces a responsive comparison preview.
-
-## Version 1.2.1 — OCR spacing
-
-Updated word-spacing reconstruction to measure the horizontal distance between consecutive OCR bounding boxes.
-
-- Character width is estimated primarily from longer alphanumeric words.
-- Gaps smaller than 2.5 estimated character widths produce one space.
-- Larger gaps retain their approximate spacing.
-- Leading indentation continues to be inferred from OCR coordinates.
-- No changes to command-line options, privacy rules, color detection, or HTML rendering.
-
-The synthetic spacing tests are included in the full test suite above.
-
-**Limitation:** OCR spacing remains an estimate. Exact preservation of source characters and whitespace requires comparison against the screenshot.
-
-## Important limitations
-
-- OCR cannot guarantee exact text or whitespace.
-- Username sanitization does not detect every identity format.
-- Color detection estimates one foreground color. It does not preserve multicolored syntax highlighting.
-- Diagram structures and software controls are not reconstructed.
-- GIF processing uses the final frame only.
-- A local preview does not establish actual Canvas compatibility.
-- Regression against approved examples must be completed before release.
+Upload PNG, JPEG, GIF, WebP, BMP or TIFF, up to **25 MB**. GIFs use the final
+composited frame. Blank label/caption fields use the converter's defaults.
+Edit the transcript and re-convert when needed; OCR still runs to measure
+colors. This migration preserves the existing UI design, color logic and
+Canvas renderer.
 
 ## Output
 
-For `example.gif`, the output directory includes:
+The UI offers four downloads, preserving the source extension in the HTML name:
 
-```text
-out/
-  Media_example.gif.html
-  example_transcript.txt
-  example_review.json
-  example_preview.html
-```
+    Media_example.gif.html
+    example_transcript.txt
+    example_review.json
+    example_preview.html
 
-Only the `Media_*.html` fragment is intended for Canvas. The preview uses a style block for local comparison only.
+Only Media_*.html is the Canvas fragment: inline styles, one div per text
+line, and no style/script/pre elements. The comparison page embeds the original
+image beside the reconstruction and uses its own local style block. Original
+image pixels are not privacy-masked; the transcript, reconstructed text and
+review words use the existing home-path and learned-email masking rules.
+
+Jobs/results are held in memory, with bounded queuing and retention. Download
+outputs you want to keep; restarting the server clears jobs. Files are not
+automatically written to the legacy out/ directory.
+
+## Test
+
+    cd web
+    npm test           # Vitest, including Fastify injection tests with mocked OCR
+    npm run build      # client/server type checks and production builds
+    npm run test:ocr   # optional real CLI + local Tesseract.js smoke test
+
+The optional OCR test requires native Tesseract and English data. The regular
+suite does not require the CLI. See [web/README.md](web/README.md) for the API,
+architecture and parity coverage.
+
+## Repository layout
+
+    web/src/core/       Pure, browser-free conversion logic (unchanged)
+    web/src/browser/    Client API calls
+    web/src/main.ts     Existing UI
+    web/server/         Fastify, image decoding, job queue and OCR adapters
+    web/tests/          Core, image, OCR-interface, client and server tests
+    imgtohtml/          Python v1.2.6 reference implementation (preserved)
+    tests/             Python reference tests
+    docs/              Historical Python documentation
+
+VisionModel and NullVisionModel are extension points only. There is no
+Ollama integration or region-review loop in this migration.
+
+## Python reference
+
+The Python implementation remains available for comparison; it is not the
+main app. Its CLI, Flask UI (:5000), and Tkinter UI are unchanged:
+
+    python -m pip install -r requirements.txt
+    python -m imgtohtml.screenshot_to_canvas example.gif --type terminal
+    python -m imgtohtml.web
+    python -m imgtohtml.ui
+    python -m unittest discover -v

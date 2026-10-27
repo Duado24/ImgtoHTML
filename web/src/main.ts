@@ -254,4 +254,3 @@ tabs.forEach((t, i) => {
     if (e.key === "ArrowLeft") pick(tabs[(i - 1 + tabs.length) % tabs.length]!);
   };
 });
-
