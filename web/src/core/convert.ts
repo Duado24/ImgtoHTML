@@ -2,6 +2,7 @@
  *  words, returns the files to offer for download. The browser parts
  *  (decoding the image, running OCR) live in src/browser/. */
 
+import { checkCanvasSafe, type CanvasIssue } from "./canvas";
 import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
 import { colorsUsed, mainColor, measureLooks, paintLines, plainLines, type PaintedLine, type WordLook } from "./paint";
@@ -49,6 +50,8 @@ export interface Review {
   second_color_ratio: number;
   check_colors_by_hand: boolean;
   contrast_ratio: number;
+  /** What Canvas's HTML editor may strip or break (see canvas.ts). */
+  canvas_issues: CanvasIssue[];
   privacy: {
     home_path_masking: boolean;
     learned_email_identity_masking: boolean;
@@ -223,6 +226,7 @@ export function convert(input: ConvertInput): ConvertResult {
     second_color_ratio: round2(measured.secondaryRatio),
     check_colors_by_hand: kind === "code" || measured.secondaryRatio >= 0.3,
     contrast_ratio: round2(contrast(foreground, background)),
+    canvas_issues: checkCanvasSafe(html),
     privacy: {
       home_path_masking: true,
       learned_email_identity_masking: true,
@@ -281,6 +285,9 @@ export function issuesFor(result: ConvertResult): Issue[] {
 
   if (words.length) {
     issues.push({ level: "error", text: `${words.length} low-confidence words — check these first.`, words });
+  }
+  for (const canvas of review.canvas_issues) {
+    issues.push({ level: canvas.level === "error" ? "error" : "warn", text: `Canvas: ${canvas.message}.` });
   }
   if (review.type !== "interface" && result.panelsFound > 1 && !result.fromTranscript) {
     issues.push({

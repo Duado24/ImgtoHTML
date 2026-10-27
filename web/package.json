@@ -10,7 +10,8 @@
     "start": "node dist-server/index.js",
     "test": "vitest run",
     "test:ocr": "tsx scripts/smoke-ocr.ts",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json",
+    "eval": "tsx scripts/eval.ts"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

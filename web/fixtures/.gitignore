@@ -1,0 +1,6 @@
+# Course screenshots may contain private data; keep them local.
+*
+!.gitignore
+!README.md
+!baseline.json
+!*/
