@@ -57,9 +57,9 @@ describe("convert", () => {
     expect(JSON.parse(result.reviewFile.content)).toEqual(result.review);
   });
 
-  it("keeps the screenshot's own background and text colors", () => {
+  it("keeps the screenshot's own background and text colors outside the course theme", () => {
     const { pixels, words } = terminal();
-    const { review, html } = convert({ fileName: "a.png", pixels, words, animated: false, kind: "terminal" });
+    const { review, html } = convert({ fileName: "a.png", pixels, words, animated: false, kind: "diagram" });
     expect(review.original_colors.background).toBe("#1e1e1e");
     expect(html).toContain("background-color:#1e1e1e");
     expect(html).toContain("color:#d4d4d4");
@@ -69,17 +69,27 @@ describe("convert", () => {
     const pixels = new FakeImage(200, 40, [0xff, 0xff, 0xff]);
     pixels.fill(10, 10, 99, 23, [0x99, 0x99, 0x99]);
     const { review } = convert({
-      fileName: "a.png", pixels, words: [word("hello", 10, 10, 90)], animated: false, kind: "terminal",
+      fileName: "a.png", pixels, words: [word("hello", 10, 10, 90)], animated: false, kind: "diagram",
     });
     expect(review.contrast_ratio).toBeGreaterThanOrEqual(4.5);
     expect(review.contrast_changes).toHaveLength(1);
   });
 
-  it("letters keep their own colors (syntax highlighting)", () => {
+  it("letters keep their own colors (syntax highlighting) outside the course theme", () => {
     const { pixels, words } = editor();
-    const { html, review } = convert({ fileName: "a.png", pixels, words, animated: false, kind: "code" });
+    const { html, review } = convert({ fileName: "a.png", pixels, words, animated: false, kind: "diagram" });
     expect(html).toContain('<span style="color:#dcdcaa;">print</span>(');
     expect(review.colors_used).toEqual(expect.arrayContaining(["#cccccc", "#dcdcaa"]));
+  });
+
+  it("code uses the course theme, keeping which letters differ", () => {
+    const { pixels, words } = editor();
+    const { html, review } = convert({ fileName: "a.png", pixels, words, animated: false, kind: "code" });
+    expect(review.theme).toBe("vscode-dark-code");
+    expect(html).toContain("background-color:#1e1e1e;color:#d4d4d4;");
+    expect(html).toContain('<span style="color:#dcdcaa;">print</span>(');
+    expect(review.contrast_changes).toEqual([]);
+    expect(review.check_colors_by_hand).toBe(false);
   });
 
   it("UI type rebuilds panels split by separator lines", () => {

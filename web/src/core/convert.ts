@@ -6,6 +6,7 @@ import { checkCanvasSafe, type CanvasIssue } from "./canvas";
 import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
 import { buildModel, flagsByRegion, type ScreenshotModel } from "./model";
+import { applyTheme, themeFor } from "./theme";
 import { colorsUsed, mainColor, measureLooks, paintLines, plainLines, type PaintedLine, type WordLook } from "./paint";
 import { learnedUsernames, sanitizeLines, sanitizeText } from "./privacy";
 import { segment, type Leaf, type Region } from "./regions";
@@ -40,6 +41,8 @@ export interface Review {
   low_confidence_words: UncertainWord[];
   original_colors: { background: string; foreground: string };
   contrast_changes: ColorChange[];
+  /** Course theme used (terminal and code), or null for the screenshot's own colors. */
+  theme: string | null;
   /** The most used text color in the HTML. */
   text_color: string;
   /** Every text color in the HTML (measured per word and code token). */
@@ -166,6 +169,10 @@ export function convert(input: ConvertInput): ConvertResult {
   const tree = segment(pixels, words);
   const panelsFound = leaves(tree).length;
   const model = buildModel(pixels.width, pixels.height, kind, tree, words);
+  // Terminals and code use the course theme; other kinds keep the screenshot's colors.
+  const theme = themeFor(kind);
+  const boxBackground = theme?.background ?? background;
+  const boxText = theme?.colors.text ?? foreground;
 
   // Accessibility text
   if (animated && caption === null) {
@@ -185,7 +192,7 @@ export function convert(input: ConvertInput): ConvertResult {
     textLines = sanitizeLines(transcript.split("\n")).lines;
     uncertain = [];
     painted = plainLines(textLines);
-    html = render(painted, kind, label, background, foreground, caption);
+    html = render(painted, kind, label, boxBackground, boxText, caption);
   } else if (kind === "interface" && tree.kind === "split") {
     textLines = ocr.lines;
     uncertain = ocr.uncertain;
@@ -205,11 +212,12 @@ export function convert(input: ConvertInput): ConvertResult {
     textLines = ocr.lines;
     uncertain = ocr.uncertain;
     painted = paintLines(ocr.rows, background, looks);
-    html = render(painted, kind, label, background, foreground, caption);
+    if (theme) painted = applyTheme(painted, theme, measured.foreground, background);
+    html = render(painted, kind, label, boxBackground, boxText, caption);
   }
 
   const colorChanges: ColorChange[] = [];
-  if (rgbHex(foreground) !== rgbHex(measured.foreground)) {
+  if (!theme && rgbHex(foreground) !== rgbHex(measured.foreground)) {
     colorChanges.push({
       element: "text",
       original: rgbHex(measured.foreground),
@@ -226,13 +234,14 @@ export function convert(input: ConvertInput): ConvertResult {
       foreground: rgbHex(measured.foreground),
     },
     contrast_changes: colorChanges,
-    text_color: rgbHex((transcript === null && mainColor(painted)) || foreground),
-    colors_used: transcript !== null ? [rgbHex(foreground)] : colorsUsed(painted),
+    theme: theme?.name ?? null,
+    text_color: rgbHex((transcript === null && mainColor(painted)) || boxText),
+    colors_used: transcript !== null ? [rgbHex(boxText)] : colorsUsed(painted),
     panels,
     icons_removed: transcript !== null ? [] : icons.map((w) => w.text),
     second_color_ratio: round2(measured.secondaryRatio),
-    check_colors_by_hand: kind === "code" || measured.secondaryRatio >= 0.3,
-    contrast_ratio: round2(contrast(foreground, background)),
+    check_colors_by_hand: !theme && measured.secondaryRatio >= 0.3,
+    contrast_ratio: round2(contrast(boxText, boxBackground)),
     canvas_issues: checkCanvasSafe(html),
     regions_to_review: flagsByRegion(model).map((r) => ({ region: r.region, confidence: r.confidence, flags: r.flags.length })),
     privacy: {
