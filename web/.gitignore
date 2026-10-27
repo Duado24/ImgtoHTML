@@ -5,3 +5,4 @@ dist-server/
 # Legacy generated browser OCR assets (no longer used or copied).
 public/ocr/
 eval-results/
+corrections/

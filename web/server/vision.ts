@@ -13,12 +13,13 @@ export interface VisionRegion {
 export interface VisionModel {
   /** Short name shown in the review, e.g. "qwen3-vl:8b-instruct-q4_K_M". */
   readonly name: string;
-  analyze(image: Pixels, regions: readonly VisionRegion[]): Promise<RegionReading[]>;
+  /** `focus`: one region the reviewer asked to re-read closely, with an optional hint. */
+  analyze(image: Pixels, regions: readonly VisionRegion[], focus?: { hint?: string }): Promise<RegionReading[]>;
 }
 
 export class NullVisionModel implements VisionModel {
   readonly name = "none";
-  async analyze(_image: Pixels, _regions: readonly VisionRegion[]): Promise<RegionReading[]> {
+  async analyze(_image: Pixels, _regions: readonly VisionRegion[], _focus?: { hint?: string }): Promise<RegionReading[]> {
     return [];
   }
 }
@@ -50,16 +51,20 @@ export class OllamaVisionModel implements VisionModel {
     private readonly timeoutMs = 120_000,
   ) {}
 
-  private async png(image: Pixels, box: Box): Promise<string> {
+  /** `enlarge`: scale small crops up so small text gets more of the model's attention. */
+  private async png(image: Pixels, box: Box, enlarge: boolean): Promise<string> {
     const crop = cropPixels(image, box);
     let pipeline = sharp(Buffer.from(crop.data.buffer, crop.data.byteOffset, crop.data.byteLength), {
       raw: { width: crop.width, height: crop.height, channels: 4 },
     });
-    if (Math.max(crop.width, crop.height) > MAX_SIDE) pipeline = pipeline.resize({ width: MAX_SIDE, height: MAX_SIDE, fit: "inside" });
+    const side = Math.max(crop.width, crop.height);
+    const target = enlarge ? Math.min(MAX_SIDE, side * 2) : Math.min(MAX_SIDE, side);
+    if (target !== side) pipeline = pipeline.resize({ width: target, height: target, fit: "inside", kernel: "lanczos3" });
     return (await pipeline.png().toBuffer()).toString("base64");
   }
 
-  private async read(image: string): Promise<{ role: string; text: string }> {
+  private async read(image: string, hint?: string): Promise<{ role: string; text: string }> {
+    const content = hint ? `${PROMPT}\nThe reviewer says this reading was wrong before. Their hint: ${hint}` : PROMPT;
     const response = await fetch(`${this.url}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -69,7 +74,7 @@ export class OllamaVisionModel implements VisionModel {
         stream: false,
         format: SCHEMA,
         options: { temperature: 0 },
-        messages: [{ role: "user", content: PROMPT, images: [image] }],
+        messages: [{ role: "user", content, images: [image] }],
       }),
     });
     if (!response.ok) throw new Error(`Ollama ${response.status}: ${await response.text()}`);
@@ -81,10 +86,11 @@ export class OllamaVisionModel implements VisionModel {
     };
   }
 
-  async analyze(image: Pixels, regions: readonly VisionRegion[]): Promise<RegionReading[]> {
+  async analyze(image: Pixels, regions: readonly VisionRegion[], focus?: { hint?: string }): Promise<RegionReading[]> {
     const readings: RegionReading[] = [];
     for (const region of regions.filter((r) => Math.min(r.box.width, r.box.height) >= MIN_SIDE).slice(0, MAX_REGIONS)) {
-      readings.push({ regionId: region.id, ...(await this.read(await this.png(image, region.box))) });
+      const png = await this.png(image, region.box, focus !== undefined);
+      readings.push({ regionId: region.id, ...(await this.read(png, focus?.hint?.trim() || undefined)) });
     }
     return readings;
   }

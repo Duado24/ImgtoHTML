@@ -89,6 +89,14 @@
 
         <ul class="issues" id="issues" aria-label="Review notes"></ul>
 
+        <section class="review" id="review" aria-labelledby="review-title" hidden>
+          <div class="review-head">
+            <p class="label" id="review-title">Review <span id="review-count"></span></p>
+            <button class="btn" id="skip-all" type="button">Skip all</button>
+          </div>
+          <ol class="regions" id="regions"></ol>
+        </section>
+
         <div class="files" id="files">
           <span class="meta">Save</span>
         </div>
@@ -107,7 +115,7 @@
             </div>
           </div>
           <div class="compare" id="compare">
-            <div class="frame"><p class="label" id="orig-label">Original</p><img id="orig" alt="The original screenshot, for comparison"></div>
+            <div class="frame"><p class="label" id="orig-label">Original</p><div class="overlay"><img id="orig" alt="The original screenshot, for comparison"><div class="boxes" id="boxes" aria-hidden="true"></div></div></div>
             <div class="frame"><p class="label">HTML in a Canvas-like page</p><iframe id="render" title="Rendered HTML preview"></iframe></div>
           </div>
         </section>

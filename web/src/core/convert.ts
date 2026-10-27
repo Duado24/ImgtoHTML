@@ -5,7 +5,7 @@
 import { checkCanvasSafe, type CanvasIssue } from "./canvas";
 import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
-import { buildModel, flagsByRegion, type ScreenshotModel } from "./model";
+import { buildModel, flagsByRegion, type ReviewState, type ScreenshotModel } from "./model";
 import { colorRoles } from "./terminal";
 import { mergeVision, type RegionReading } from "./vision";
 import { applyTheme, themeFor } from "./theme";
@@ -318,6 +318,24 @@ export function addVision(result: ConvertResult, model: string, readings: readon
   };
 }
 
+/** Record the reviewer's decisions (approved, corrected, skipped) on regions.
+ *  Decided regions keep their flags in the model but leave the review list. */
+export function applyDecisions(result: ConvertResult, decisions: ReadonlyMap<string, ReviewState>): ConvertResult {
+  if (!decisions.size) return result;
+  const model = {
+    ...result.model,
+    regions: result.model.regions.map((r) => (decisions.has(r.id) ? { ...r, review: decisions.get(r.id)! } : r)),
+  };
+  const review: Review = { ...result.review, regions_to_review: regionsToReview(model) };
+  return {
+    ...result,
+    review,
+    model,
+    reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) },
+    modelFile: { ...result.modelFile, content: JSON.stringify(model, null, 2) },
+  };
+}
+
 // ------------------------------------------------------------
 // What the page shows (was summarize() in web.py)
 // ------------------------------------------------------------
@@ -331,7 +349,14 @@ export interface Issue {
 export function issuesFor(result: ConvertResult): Issue[] {
   const { review } = result;
   const issues: Issue[] = [];
-  const words = review.low_confidence_words.map((w) => w.text);
+  // Only regions still waiting for review; approved or skipped ones are settled.
+  const waiting = result.model.regions.filter((r) => r.review === "pending");
+  const pending = waiting.flatMap((r) => r.flags);
+  const spanText = new Map(waiting.flatMap((r) => r.lines.flatMap((l) => l.spans)).map((s) => [s.id, s.text]));
+  // A corrected transcript replaced the OCR text, so its OCR doubts no longer apply.
+  const words = result.fromTranscript
+    ? []
+    : pending.filter((f) => f.reason === "low-confidence").flatMap((f) => spanText.get(f.spanId) ?? []);
 
   if (words.length) {
     issues.push({ level: "error", text: `${words.length} low-confidence words — check these first.`, words });
@@ -339,7 +364,7 @@ export function issuesFor(result: ConvertResult): Issue[] {
   if (review.vision?.error) {
     issues.push({ level: "warn", text: `Vision model didn't run (${review.vision.error}); OCR only.` });
   }
-  const disagree = result.model.regions.flatMap((r) => r.flags).filter((f) => f.reason === "sources-disagree");
+  const disagree = pending.filter((f) => f.reason === "sources-disagree");
   if (disagree.length) {
     issues.push({
       level: "error",
@@ -347,7 +372,7 @@ export function issuesFor(result: ConvertResult): Issue[] {
       words: disagree.map((f) => f.detail),
     });
   }
-  const fixes = result.model.regions.flatMap((r) => r.flags).filter((f) => f.reason === "suggested-fix");
+  const fixes = pending.filter((f) => f.reason === "suggested-fix");
   if (fixes.length) {
     issues.push({
       level: "error",

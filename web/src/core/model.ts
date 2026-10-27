@@ -158,10 +158,10 @@ export function buildModel(width: number, height: number, kind: Kind, tree: Regi
   return { version: MODEL_VERSION, width, height, kind, regions };
 }
 
-/** Every flag in the model, with its region, most urgent region first. */
+/** Flags of regions still waiting for review, most urgent region first. */
 export function flagsByRegion(model: ScreenshotModel): { region: string; confidence: number | null; flags: Flag[] }[] {
   return model.regions
-    .filter((r) => r.flags.length)
+    .filter((r) => r.flags.length && r.review === "pending")
     .map((r) => ({ region: r.id, confidence: r.confidence, flags: r.flags }))
     .sort((a, b) => (a.confidence ?? 0) - (b.confidence ?? 0));
 }

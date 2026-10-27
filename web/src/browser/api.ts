@@ -18,7 +18,13 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /** The browser only transfers the local file and displays the server's output. */
-export async function convertOnServer(file: File, options: ConversionOptions, progress: (text: string) => void): Promise<JobResult> {
+/** `onJob` receives the job ID, which review actions need. */
+export async function convertOnServer(
+  file: File,
+  options: ConversionOptions,
+  progress: (text: string) => void,
+  onJob?: (id: string) => void,
+): Promise<JobResult> {
   const form = new FormData();
   form.append("image", file);
   form.append("kind", options.kind);
@@ -27,6 +33,39 @@ export async function convertOnServer(file: File, options: ConversionOptions, pr
   if (options.transcript !== undefined) form.append("transcript", options.transcript);
   progress("Opening the image…");
   const { id } = await json<{ id: string }>("/api/convert", { method: "POST", body: form });
+  onJob?.(id);
+  return waitFor(id, progress);
+}
+
+const post = (id: string, action: string, body: object) =>
+  json<Job | { id: string }>(`/api/jobs/${encodeURIComponent(id)}/${action}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+function done(job: Job | { id: string }): JobResult {
+  if ("status" in job && job.status === "completed") return job.result;
+  throw new Error("Unexpected reply from the local server.");
+}
+
+/** Mark a region (or "all" waiting regions) as approved or skipped. */
+export async function decide(id: string, region: string, state: "approved" | "skipped"): Promise<JobResult> {
+  return done(await post(id, "decide", { region, state }));
+}
+
+/** Replace one word (span) with the reviewer's text. */
+export async function editSpan(id: string, span: string, text: string): Promise<JobResult> {
+  return done(await post(id, "edit", { span, text }));
+}
+
+/** Read one region again, enlarged, with an optional hint for the vision model. */
+export async function retryRegion(id: string, region: string, hint: string, progress: (text: string) => void): Promise<JobResult> {
+  await post(id, "retry", hint ? { region, hint } : { region });
+  return waitFor(id, progress);
+}
+
+async function waitFor(id: string, progress: (text: string) => void): Promise<JobResult> {
   for (;;) {
     const job = await json<Job>(`/api/jobs/${encodeURIComponent(id)}`);
     if (job.status === "completed") return job.result;

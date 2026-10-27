@@ -1,9 +1,10 @@
 import "./style.css";
 
 import { issuesFor, type ConvertResult, type OutputFile } from "./core/convert";
+import type { ModelRegion } from "./core/model";
 import { isKind } from "./core/types";
-import { SUPPORTED } from "./shared/api";
-import { convertOnServer } from "./browser/api";
+import { SUPPORTED, type JobResult } from "./shared/api";
+import { convertOnServer, decide, editSpan, retryRegion } from "./browser/api";
 
 const MAX_MB = 25;
 
@@ -23,6 +24,9 @@ const captionInput = $<HTMLInputElement>("caption");
 
 let file: File | null = null;
 let lastHTML = "";
+/** The server job behind the shown result; review actions act on it. */
+let jobId = "";
+let current: ConvertResult | null = null;
 let objectUrls: string[] = [];
 
 /* ── Theme: solid black or solid white. Follows the computer's
@@ -114,10 +118,10 @@ async function run(transcriptText?: string) {
       label: labelInput.value,
       caption: captionInput.value,
       transcript: transcriptText,
-    }, (message) => say(message));
+    }, (message) => say(message), (id) => (jobId = id));
     if (/\.tiff?$/i.test(file.name)) $<HTMLImageElement>("orig").src = result.imageDataUrl;
     show(result, result.preview);
-    say("Draft ready. Review it before pasting into Canvas.");
+    say(readyText(result));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     say(`Conversion failed: ${msg}`, true);
@@ -150,6 +154,8 @@ function show(result: ConvertResult, preview: OutputFile) {
   $("empty").hidden = true;
   $("results").hidden = false;
   lastHTML = result.html;
+  current = result;
+  renderReview(result);
   const { review } = result;
 
   $("s-lines").textContent = String(result.lineCount);
@@ -216,6 +222,116 @@ function show(result: ConvertResult, preview: OutputFile) {
     "</body>";
 }
 
+/* ── Review loop ────────────────────────────────── */
+const toReview = (r: ConvertResult) => r.model.regions.filter((x) => x.review === "pending" && x.flags.length);
+
+function readyText(r: ConvertResult): string {
+  const n = toReview(r).length;
+  return n ? `Draft ready. ${n} ${n === 1 ? "region needs" : "regions need"} a look before Canvas.` : "Draft ready. Nothing left to review.";
+}
+
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text = ""): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text) e.textContent = text;
+  return e;
+}
+
+function button(text: string, onClick: () => void, className = ""): HTMLButtonElement {
+  const b = el("button", `btn ${className}`.trim(), text);
+  b.type = "button";
+  b.onclick = onClick;
+  return b;
+}
+
+/** Run one review action against the server and show the new result. */
+async function act(work: () => Promise<JobResult>, busy: string) {
+  if (!jobId) return;
+  shell.classList.add("busy");
+  say(busy);
+  try {
+    const result = await work();
+    show(result, result.preview);
+    say(readyText(result));
+  } catch (err) {
+    say(`That didn't work: ${err instanceof Error ? err.message : String(err)}`, true);
+  } finally {
+    shell.classList.remove("busy");
+  }
+}
+
+function highlight(region: string | null) {
+  for (const box of $("boxes").children) (box as HTMLElement).classList.toggle("active", (box as HTMLElement).dataset.region === region);
+  for (const card of $("regions").children) (card as HTMLElement).classList.toggle("active", (card as HTMLElement).dataset.region === region);
+}
+
+function regionCard(region: ModelRegion): HTMLLIElement {
+  const li = el("li", "region");
+  li.dataset.region = region.id;
+  const sure = region.confidence === null ? "" : ` · ${Math.round(region.confidence * 100)}% sure`;
+  li.append(el("h3", "", `${region.id} · ${region.role}${sure}`));
+
+  // One row per flagged word: why it was flagged, other readings to pick, or type it.
+  const spans = new Map(region.lines.flatMap((l) => l.spans).map((s) => [s.id, s]));
+  const reasons = new Map<string, string[]>();
+  for (const flag of region.flags) reasons.set(flag.spanId, [...(reasons.get(flag.spanId) ?? []), flag.detail]);
+  for (const [spanId, details] of reasons) {
+    const span = spans.get(spanId);
+    if (!span) continue;
+    const row = el("div", "flag");
+    row.append(el("code", "", span.text), el("span", "", details.join(" · ")));
+    for (const text of new Set(span.alternatives.map((a) => a.text).filter((t) => t !== span.text))) {
+      const use = button("Use ", () => void act(() => editSpan(jobId, span.id, text), "Saving…"));
+      use.append(el("code", "", text)); // shown as is: the button style uppercases its own label
+      row.append(use);
+    }
+    const input = el("input");
+    input.value = span.text;
+    input.setAttribute("aria-label", `Correct the word “${span.text}”`);
+    row.append(input, button("Save", () => void act(() => editSpan(jobId, span.id, input.value), "Saving…")));
+    li.append(row);
+  }
+
+  const hint = el("input");
+  hint.placeholder = "Optional hint, e.g. “this is a table”";
+  hint.setAttribute("aria-label", `Hint for reading ${region.id} again`);
+  const actions = el("div", "actions");
+  actions.append(
+    button("Looks right", () => void act(() => decide(jobId, region.id, "approved"), "Saving…"), "primary"),
+    button("Doesn't look right — focus here", () => void act(() => retryRegion(jobId, region.id, hint.value, (m) => say(m)), `Reading ${region.id} again…`)),
+    hint,
+    button("Skip", () => void act(() => decide(jobId, region.id, "skipped"), "Saving…")),
+  );
+  li.append(actions);
+  li.addEventListener("mouseenter", () => highlight(region.id));
+  li.addEventListener("focusin", () => highlight(region.id));
+  li.addEventListener("mouseleave", () => highlight(null));
+  return li;
+}
+
+function renderReview(result: ConvertResult) {
+  const { width, height, regions } = result.model;
+  const flagged = regions.filter((r) => r.flags.length);
+  const pct = (x: number) => `${(x * 100).toFixed(2)}%`;
+  $("boxes").replaceChildren(
+    ...flagged.map((r) => {
+      const box = el("div");
+      box.dataset.region = r.id;
+      const serious = r.flags.some((f) => f.reason !== "confusable");
+      box.className = r.review === "pending" ? (serious ? "bad" : "") : r.review === "skipped" ? "skipped" : "done";
+      Object.assign(box.style, { left: pct(r.box.x / width), top: pct(r.box.y / height), width: pct(r.box.width / width), height: pct(r.box.height / height) });
+      return box;
+    }),
+  );
+  const pending = toReview(result);
+  $("review").hidden = flagged.length === 0;
+  $("review-count").textContent = pending.length ? `· ${pending.length} to check` : "· done";
+  $<HTMLButtonElement>("skip-all").disabled = pending.length === 0;
+  $("regions").replaceChildren(...pending.map(regionCard));
+}
+
+$("skip-all").onclick = () => void act(() => decide(jobId, "all", "skipped"), "Skipping the rest…");
+
 /* ── Preview width ──────────────────────────────── */
 document.querySelectorAll<HTMLInputElement>('input[name="width"]').forEach((r) => {
   r.onchange = () => $("compare").classList.toggle("phone", r.value === "phone" && r.checked);
@@ -233,8 +349,10 @@ $("copy").onclick = async () => {
     document.execCommand("copy");
     t.remove();
   }
-  $("copy-text").textContent = "Copied ✓";
-  setTimeout(() => ($("copy-text").textContent = "Copy HTML"), 1600);
+  // A warning, not a block: unreviewed regions may still hold OCR mistakes.
+  const left = current ? toReview(current).length : 0;
+  $("copy-text").textContent = left ? `Copied — ${left} not reviewed` : "Copied ✓";
+  setTimeout(() => ($("copy-text").textContent = "Copy HTML"), left ? 3200 : 1600);
 };
 
 /* ── Tabs (click + arrow keys) ──────────────────── */

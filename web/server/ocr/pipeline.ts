@@ -31,7 +31,7 @@ async function readArea(engine: OcrEngine, pixels: Pixels, background: RGB, orig
 }
 
 const leaves = (r: Region): Leaf[] => r.kind === "leaf" ? [r] : r.children.flatMap(leaves);
-const score = (words: readonly OcrWord[]) => words.reduce((sum, w) =>
+export const score = (words: readonly OcrWord[]) => words.reduce((sum, w) =>
   sum + Math.max(0, w.confidence) * (w.text.match(/[\p{L}\p{N}]/gu)?.length ?? 0), 0);
 
 /** Same ink preprocessing and per-panel score selection as the browser pipeline. */

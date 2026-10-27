@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { isKind } from "../src/core/types";
 import { MAX_UPLOAD_BYTES } from "../src/shared/api";
 import { decodeImage, InvalidImage } from "./image";
-import { Jobs } from "./jobs";
+import { Jobs, ReviewError } from "./jobs";
+import type { Job } from "../src/shared/api";
 import { LocalOcr } from "./ocr";
 import type { OcrEngine } from "./ocr/engine";
 import { NullVisionModel, OllamaVisionModel, type VisionModel } from "./vision";
@@ -17,6 +18,8 @@ interface AppOptions {
   ocr?: OcrEngine;
   /** Default: Ollama on this computer, unless IMGTOHTML_VISION=off. */
   vision?: VisionModel;
+  /** File for reviewer corrections; null keeps none. Default: web/corrections/corrections.jsonl. */
+  corrections?: string | null;
   /** false for API-only tests; the default is the Vite build directory. */
   clientRoot?: string | false;
   logger?: boolean;
@@ -25,7 +28,7 @@ interface AppOptions {
 export async function createApp(options: AppOptions = {}) {
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: MAX_UPLOAD_BYTES });
   const vision = options.vision ?? (process.env.IMGTOHTML_VISION === "off" ? new NullVisionModel() : new OllamaVisionModel());
-  const jobs = new Jobs(options.ocr ?? new LocalOcr(), vision);
+  const jobs = new Jobs(options.ocr ?? new LocalOcr(), vision, options.corrections);
   let active = 0;
   app.addHook("onClose", async () => { await jobs.close(); });
 
@@ -93,6 +96,29 @@ export async function createApp(options: AppOptions = {}) {
     if (!job) return reply.code(404).send({ error: "Job not found or expired. Convert the image again." });
     return job;
   });
+
+  // Review actions on a finished job. Each returns the job (retry: 202, then poll).
+  const review = <B>(path: string, act: (id: string, body: B) => Job | Promise<Job> | void) =>
+    app.post<{ Params: { id: string }; Body: B }>(`/api/jobs/:id/${path}`, async (request, reply) => {
+      try {
+        const job = await act(request.params.id, (request.body ?? {}) as B);
+        return job ? job : reply.code(202).send({ id: request.params.id });
+      } catch (error) {
+        if (error instanceof ReviewError) return reply.code(409).send({ error: error.message });
+        throw error;
+      }
+    });
+  const text = (value: unknown, name: string, max = 200) => {
+    if (typeof value !== "string" || value.length > max) throw new ReviewError(`Missing or too long: ${name}.`);
+    return value;
+  };
+  review<{ region?: unknown; state?: unknown }>("decide", (id, body) => {
+    if (body.state !== "approved" && body.state !== "skipped") throw new ReviewError("state must be approved or skipped.");
+    return jobs.decide(id, text(body.region, "region"), body.state);
+  });
+  review<{ span?: unknown; text?: unknown }>("edit", (id, body) => jobs.edit(id, text(body.span, "span"), text(body.text, "text")));
+  review<{ region?: unknown; hint?: unknown }>("retry", (id, body) =>
+    jobs.retry(id, text(body.region, "region"), body.hint === undefined ? undefined : text(body.hint, "hint", 500)));
 
   app.setErrorHandler<FastifyError>((error, _request, reply) => {
     const status = typeof error.statusCode === "number" ? error.statusCode : 500;
