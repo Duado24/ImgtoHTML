@@ -1,10 +1,9 @@
 import "./style.css";
 
-import { convert, issuesFor, previewPage, type ConvertResult, type OutputFile } from "./core/convert";
+import { issuesFor, type ConvertResult, type OutputFile } from "./core/convert";
 import { isKind } from "./core/types";
-import { decodeImage, SUPPORTED, type Decoded } from "./browser/image";
-import { recognizeWords, warmUp } from "./browser/ocr";
-import type { OcrWord } from "./core/types";
+import { SUPPORTED } from "./shared/api";
+import { convertOnServer } from "./browser/api";
 
 const MAX_MB = 25;
 
@@ -24,9 +23,6 @@ const captionInput = $<HTMLInputElement>("caption");
 
 let file: File | null = null;
 let lastHTML = "";
-/** OCR is the slow part; keep its result while the same file is chosen,
- *  so "Re-convert with this text" is instant. */
-let cache: { file: File; image: Decoded; words: OcrWord[] } | null = null;
 let objectUrls: string[] = [];
 
 /* ── Theme: solid black or solid white. Follows the computer's
@@ -66,10 +62,10 @@ const drop = $("drop");
 const input = $<HTMLInputElement>("file");
 
 function setFile(f: File | undefined) {
-  if (!f) return;
+  if (!f || go.disabled) return;
   const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
   if (!(SUPPORTED as readonly string[]).includes(ext)) {
-    say("Unsupported image format. Use PNG, JPG, GIF, WEBP, or BMP.", true);
+    say("Unsupported image format. Use PNG, JPG, GIF, WEBP, BMP, or TIFF.", true);
     return;
   }
   if (f.size > MAX_MB * 1024 * 1024) {
@@ -81,7 +77,9 @@ function setFile(f: File | undefined) {
   $("fmeta").textContent = (f.size / 1024).toFixed(0) + " KB · click to change";
   const orig = $<HTMLImageElement>("orig");
   if (orig.src.startsWith("blob:")) URL.revokeObjectURL(orig.src);
-  orig.src = URL.createObjectURL(f);
+  // Browsers cannot display TIFF; the server supplies its decoded PNG.
+  if (/\.tiff?$/i.test(f.name)) orig.removeAttribute("src");
+  else orig.src = URL.createObjectURL(f);
   $("orig-label").textContent = /\.gif$/i.test(f.name) ? "Original · animated; HTML uses the final frame" : "Original";
   say("Ready");
 }
@@ -102,21 +100,8 @@ for (const ev of ["dragleave", "drop"]) {
 drop.addEventListener("drop", (e) => setFile((e as DragEvent).dataTransfer?.files[0]));
 
 /* ── Convert ────────────────────────────────────── */
-const STEPS: Record<string, string> = {
-  "loading tesseract core": "Loading the text reader…",
-  "initializing tesseract": "Loading the text reader…",
-  "loading language traineddata": "Loading English language data…",
-  "initializing api": "Starting the text reader…",
-  "recognizing text": "Reading text",
-};
-
 async function run(transcriptText?: string) {
   if (!file) return say("Choose a screenshot first.", true);
-  if (!labelInput.value.trim()) {
-    say("Enter a screen-reader label: one sentence describing what the screenshot shows.", true);
-    labelInput.focus();
-    return;
-  }
   const kind = new FormData(form).get("kind")?.toString() ?? "terminal";
   if (!isKind(kind)) return say("Choose a supported screenshot type.", true);
 
@@ -124,29 +109,14 @@ async function run(transcriptText?: string) {
   go.disabled = reconvert.disabled = true;
 
   try {
-    if (cache?.file !== file) {
-      say("Opening the image…");
-      const image = await decodeImage(file);
-      const words = await recognizeWords(image.pixels, (step, progress) => {
-        if (step.startsWith("reading panel")) return say(`Reading ${step.slice(8)}…`);
-        const text = STEPS[step] ?? "Working…";
-        say(step === "recognizing text" ? `${text} ${Math.round(progress * 100)}%…` : text);
-      });
-      cache = { file, image, words };
-    }
-
-    say("Measuring colors…");
-    const result = convert({
-      fileName: file.name,
-      pixels: cache.image.pixels,
-      words: cache.words,
-      animated: cache.image.animated,
+    const result = await convertOnServer(file, {
       kind,
       label: labelInput.value,
       caption: captionInput.value,
       transcript: transcriptText,
-    });
-    show(result, previewPage(result, cache.image.canvas.toDataURL("image/png")));
+    }, (message) => say(message));
+    if (/\.tiff?$/i.test(file.name)) $<HTMLImageElement>("orig").src = result.imageDataUrl;
+    show(result, result.preview);
     say("Draft ready. Review it before pasting into Canvas.");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -285,5 +255,3 @@ tabs.forEach((t, i) => {
   };
 });
 
-// Load the OCR engine while the user fills in the form.
-warmUp();

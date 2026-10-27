@@ -10,7 +10,7 @@
   <header class="top">
     <div class="brand">
       <h1>Imgto<span>HTML</span></h1>
-      <span class="meta"><span class="dot" aria-hidden="true"></span>Runs in your browser · Nothing leaves this computer</span>
+      <span class="meta"><span class="dot" aria-hidden="true"></span>Runs locally · Nothing leaves this computer</span>
     </div>
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <button class="btn icon-btn" id="theme" type="button" aria-label="Switch light/dark mode">
@@ -27,8 +27,8 @@
         <label class="drop" id="drop" aria-describedby="l-source">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
           <strong id="fname">Drop a screenshot or GIF</strong>
-          <span id="fmeta">or click to choose · PNG JPG GIF WEBP BMP</span>
-          <input type="file" id="file" name="image" accept=".png,.jpg,.jpeg,.gif,.webp,.bmp">
+          <span id="fmeta">or click to choose · PNG JPG GIF WEBP BMP TIFF</span>
+          <input type="file" id="file" name="image" accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff">
         </label>
       </div>
 
@@ -44,8 +44,8 @@
       </div>
 
       <div class="step">
-        <label class="label" for="label"><span><span class="n">03</span> Screen-reader label</span><span>Required</span></label>
-        <input type="text" id="label" name="label" required placeholder="e.g. Terminal running the sign-up program for Homer Simpson">
+        <label class="label" for="label"><span><span class="n">03</span> Screen-reader label</span><span>Optional</span></label>
+        <input type="text" id="label" name="label" placeholder="e.g. Terminal running the sign-up program for Homer Simpson">
         <p class="help">One sentence a screen reader announces before the content.</p>
       </div>
 

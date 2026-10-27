@@ -2,15 +2,18 @@
   "name": "imgtohtml-web",
   "version": "2.0.0",
   "private": true,
-  "description": "ImgtoHTML in the browser: screenshot to Canvas HTML, all processing local.",
+  "description": "Local screenshot to Canvas HTML app, with a TypeScript client and Node server.",
   "type": "module",
   "scripts": {
-    "postinstall": "node scripts/copy-ocr-assets.mjs",
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
+    "dev": "concurrently --kill-others --names server,client \"tsx watch server/index.ts\" \"vite\"",
+    "build": "npm run typecheck && vite build && esbuild server/index.ts --bundle --platform=node --target=node20 --format=esm --packages=external --outfile=dist-server/index.js",
+    "start": "node dist-server/index.js",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "test:ocr": "tsx scripts/smoke-ocr.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.6",
@@ -18,13 +21,12 @@
     "@tesseract.js-data/eng": "^1.0.0",
     "bmp-ts": "^1.0.9",
     "fastify": "^5.12.7",
-    "gifuct-js": "^2.1.2",
     "sharp": "^0.35.5",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
-    "concurrently": "^10.0.6",
+    "concurrently": "^9.2.5",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

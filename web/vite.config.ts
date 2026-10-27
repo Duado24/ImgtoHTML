@@ -1,13 +1,16 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  // Relative asset paths, so the built folder works from any web address
-  // (a course server, GitHub Pages, a shared drive behind a web server).
-  base: "./",
+  // OCR workers/data now live only on the server, including older generated assets.
+  publicDir: false,
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: true,
+    proxy: { "/api": "http://127.0.0.1:3000" },
+  },
   build: {
     outDir: "dist",
-    // The OCR files in public/ocr are large on purpose; don't warn about them.
-    chunkSizeWarningLimit: 2000,
   },
   test: {
     include: ["tests/**/*.test.ts"],

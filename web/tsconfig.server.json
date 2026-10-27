@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["server", "src/core", "src/shared"]
+  "include": ["server", "src/core", "src/shared", "scripts"]
 }

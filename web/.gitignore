@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-server/
 .claude/
-# Copied from node_modules by `npm install` (scripts/copy-ocr-assets.mjs).
+# Legacy generated browser OCR assets (no longer used or copied).
 public/ocr/
