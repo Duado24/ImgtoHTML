@@ -197,6 +197,7 @@ function show(result: ConvertResult, preview: OutputFile) {
     downloadButton(result.htmlFile, "Canvas HTML"),
     downloadButton(result.transcriptFile, "Transcript"),
     downloadButton(result.reviewFile, "Review JSON"),
+    downloadButton(result.modelFile, "Model JSON"),
     downloadButton(preview, "Comparison page"),
   );
 

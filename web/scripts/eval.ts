@@ -30,6 +30,10 @@ interface Entry {
   kind: Kind;
   seconds: number;
   lowConfidence: number;
+  regions?: number;
+  /** Regions the review loop would ask about, and their flags. */
+  flaggedRegions?: number;
+  flags?: number;
   canvasErrors: string[];
   canvasWarnings: string[];
   text: TextScore | null;
@@ -90,6 +94,9 @@ try {
       kind,
       seconds: Math.round(seconds * 10) / 10,
       lowConfidence: result.lowConfidenceCount,
+      regions: result.model.regions.length,
+      flaggedRegions: result.review.regions_to_review.length,
+      flags: result.model.regions.reduce((sum, r) => sum + r.flags.length, 0),
       canvasErrors: issues.filter((i) => i.level === "error").map((i) => i.message),
       canvasWarnings: issues.filter((i) => i.level === "warning").map((i) => i.message),
       text: expected === null ? null : scoreText(expected, result.transcript),
@@ -126,6 +133,7 @@ console.table(
       "lines exact": e.text ? pct(e.text.lineAccuracy) : "-",
       confusable: e.text?.confusable?.length ?? "-",
       "low conf": e.lowConfidence,
+      "to review": `${e.flaggedRegions}/${e.regions}`,
       canvas: e.canvasErrors.length ? `${e.canvasErrors.length} errors` : e.canvasWarnings.length ? `${e.canvasWarnings.length} warnings` : "ok",
       sec: e.seconds,
     };

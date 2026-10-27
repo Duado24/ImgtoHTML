@@ -5,6 +5,7 @@
 import { checkCanvasSafe, type CanvasIssue } from "./canvas";
 import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
+import { buildModel, flagsByRegion, type ScreenshotModel } from "./model";
 import { colorsUsed, mainColor, measureLooks, paintLines, plainLines, type PaintedLine, type WordLook } from "./paint";
 import { learnedUsernames, sanitizeLines, sanitizeText } from "./privacy";
 import { segment, type Leaf, type Region } from "./regions";
@@ -52,6 +53,8 @@ export interface Review {
   contrast_ratio: number;
   /** What Canvas's HTML editor may strip or break (see canvas.ts). */
   canvas_issues: CanvasIssue[];
+  /** Regions with flagged text, least confident first (details in the model file). */
+  regions_to_review: { region: string; confidence: number | null; flags: number }[];
   privacy: {
     home_path_masking: boolean;
     learned_email_identity_masking: boolean;
@@ -82,6 +85,9 @@ export interface ConvertResult {
   htmlFile: OutputFile;
   transcriptFile: OutputFile;
   reviewFile: OutputFile;
+  /** Regions, lines and spans with confidence and source (see model.ts). */
+  model: ScreenshotModel;
+  modelFile: OutputFile;
 }
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
@@ -159,6 +165,7 @@ export function convert(input: ConvertInput): ConvertResult {
   const foreground = fixContrast(measured.foreground, background);
   const tree = segment(pixels, words);
   const panelsFound = leaves(tree).length;
+  const model = buildModel(pixels.width, pixels.height, kind, tree, words);
 
   // Accessibility text
   if (animated && caption === null) {
@@ -227,6 +234,7 @@ export function convert(input: ConvertInput): ConvertResult {
     check_colors_by_hand: kind === "code" || measured.secondaryRatio >= 0.3,
     contrast_ratio: round2(contrast(foreground, background)),
     canvas_issues: checkCanvasSafe(html),
+    regions_to_review: flagsByRegion(model).map((r) => ({ region: r.region, confidence: r.confidence, flags: r.flags.length })),
     privacy: {
       home_path_masking: true,
       learned_email_identity_masking: true,
@@ -265,6 +273,8 @@ export function convert(input: ConvertInput): ConvertResult {
       mime: "application/json",
       content: JSON.stringify(review, null, 2),
     },
+    model,
+    modelFile: { name: `${stem}_model.json`, mime: "application/json", content: JSON.stringify(model, null, 2) },
   };
 }
 
