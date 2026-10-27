@@ -6,8 +6,9 @@ import { checkCanvasSafe, type CanvasIssue } from "./canvas";
 import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
 import { buildModel, flagsByRegion, type ReviewState, type ScreenshotModel } from "./model";
-import { cleanCode, detectLanguage, highlightCode, type CodeCleanup } from "./code";
+import { cleanCode, detectLanguage, highlightCode, repairJsonBraces, type CodeCleanup } from "./code";
 import { renderDiagram, unconfirmedLabels, type Diagram } from "./diagram";
+import { renderEditorWindow } from "./editor-window";
 import { colorRoles } from "./terminal";
 import { mergeVision, type RegionReading } from "./vision";
 import { applyTheme, themeFor } from "./theme";
@@ -30,6 +31,8 @@ export interface ConvertInput {
   caption?: string | null;
   /** Corrected transcript; replaces the OCR text when given. */
   transcript?: string | null;
+  /** Code screenshots: draw the editor window (sidebar, tabs, line numbers). Default true. */
+  editorWindow?: boolean;
 }
 
 export interface ColorChange {
@@ -63,7 +66,7 @@ export interface Review {
   /** Regions with flagged text, least confident first (details in the model file). */
   regions_to_review: { region: string; confidence: number | null; flags: number }[];
   /** Code screenshots: detected language and the clean-up applied to the OCR text. */
-  code: { language: string | null; line_numbers_removed: boolean; lines_outside_code: number; panels_left_out: number; quotes_straightened: number; indent_unit: number | null; lines_snapped: number } | null;
+  code: { editor_window: boolean; language: string | null; line_numbers_removed: boolean; lines_outside_code: number; panels_left_out: number; quotes_straightened: number; braces_repaired: number; indent_unit: number | null; lines_snapped: number } | null;
   /** Diagrams described by the vision model: size, and labels OCR didn't confirm. */
   diagram: { parts: number; connections: number; unconfirmed_labels: string[] } | null;
   /** The vision model that also read the screenshot, or null when none ran. */
@@ -223,14 +226,35 @@ export function convert(input: ConvertInput): ConvertResult {
     textLines = cleaned?.lines ?? sanitizeLines(transcript!.split("\n")).lines;
     uncertain = editor ? layoutWords(editor.leaf.words).uncertain : [];
     const language = detectLanguage(textLines.join("\n"));
+    // OCR text only: a typed transcript is used exactly as given.
+    const braces = language === "json" && cleaned ? repairJsonBraces(textLines) : { lines: textLines, repaired: 0 };
+    textLines = braces.lines;
     painted = highlightCode(textLines.join("\n"), language, theme);
-    html = render(painted, kind, label, boxBackground, boxText, caption);
+    // Draw the editor window (sidebar, tabs, line numbers) when the
+    // screenshot is an editor with numbered lines, unless turned off.
+    const framed = editor !== null && cleaned!.lineNumbersRemoved && input.editorWindow !== false;
+    if (framed) {
+      const sidebar = leaves(tree)
+        .filter((l) => l !== editor.leaf && l.words.length && l.box.x + l.box.width <= editor.leaf.box.x + 4)
+        .sort((a, b) => b.words.length - a.words.length)[0];
+      html = renderEditorWindow(
+        painted,
+        { sidebar: sidebar ? layoutWords(sidebar.words).lines : null, header: cleaned!.header, hints: cleaned!.hints, firstLine: cleaned!.firstLine },
+        rgbHex(theme.colors.text),
+        label,
+        caption,
+      );
+    } else {
+      html = render(painted, kind, label, boxBackground, boxText, caption);
+    }
     code = {
+      editor_window: framed,
       language,
       line_numbers_removed: cleaned?.lineNumbersRemoved ?? false,
       lines_outside_code: cleaned?.linesOutsideCode ?? 0,
       panels_left_out: editor ? panelsFound - 1 : 0,
       quotes_straightened: cleaned?.quotesStraightened ?? 0,
+      braces_repaired: braces.repaired,
       indent_unit: cleaned?.indentUnit ?? null,
       lines_snapped: cleaned?.linesSnapped ?? 0,
     };
@@ -448,17 +472,23 @@ export function issuesFor(result: ConvertResult): Issue[] {
     issues.push({ level: "warn", text: "Diagram structure needs the vision model; this is only the text OCR found." });
   }
   if (review.code) {
-    const { language, line_numbers_removed, lines_outside_code, panels_left_out, quotes_straightened, indent_unit, lines_snapped } = review.code;
+    const { editor_window, language, line_numbers_removed, lines_outside_code, panels_left_out, quotes_straightened, braces_repaired, indent_unit, lines_snapped } =
+      review.code;
     const lines = (n: number) => `${n} ${n === 1 ? "line" : "lines"}`;
     const notes = [
       language ? `Highlighted as ${language === "xml" ? "HTML/XML" : language}` : "Language not recognized; shown without syntax colors",
-      ...(panels_left_out ? [`only the code panel is used (${panels_left_out} other ${panels_left_out === 1 ? "panel" : "panels"} such as the sidebar left out)`] : []),
-      ...(line_numbers_removed ? ["line numbers removed so copied code runs"] : []),
-      ...(lines_outside_code ? [`${lines(lines_outside_code)} of editor text left out (tabs, breadcrumbs, hints)`] : []),
+      ...(editor_window
+        ? ["drawn as the editor window (sidebar, tabs and line numbers are hidden from screen readers)"]
+        : [
+            ...(panels_left_out ? [`only the code panel is used (${panels_left_out} other ${panels_left_out === 1 ? "panel" : "panels"} such as the sidebar left out)`] : []),
+            ...(line_numbers_removed ? ["line numbers removed so copied code runs"] : []),
+            ...(lines_outside_code ? [`${lines(lines_outside_code)} of editor text left out (tabs, breadcrumbs, hints)`] : []),
+          ]),
       ...(quotes_straightened ? [`curly quotes made straight on ${lines(quotes_straightened)}`] : []),
+      ...(braces_repaired ? [`${braces_repaired} misread ${braces_repaired === 1 ? "brace" : "braces"} repaired — check them`] : []),
       ...(lines_snapped ? [`indentation of ${lines_snapped} ${lines_snapped === 1 ? "line" : "lines"} snapped to ${indent_unit} spaces — check it`] : []),
     ];
-    issues.push({ level: lines_snapped ? "warn" : "info", text: notes.join("; ") + "." });
+    issues.push({ level: lines_snapped || braces_repaired ? "warn" : "info", text: notes.join("; ") + "." });
   }
   const disagree = pending.filter((f) => f.reason === "sources-disagree");
   if (disagree.length) {
@@ -479,7 +509,8 @@ export function issuesFor(result: ConvertResult): Issue[] {
   for (const canvas of review.canvas_issues) {
     issues.push({ level: canvas.level === "error" ? "error" : "warn", text: `Canvas: ${canvas.message}.` });
   }
-  if (review.type !== "interface" && result.panelsFound > 1 && !result.fromTranscript) {
+  // Code already picks its editor panel; other types may be an app window.
+  if (review.type !== "interface" && review.type !== "code" && result.panelsFound > 1 && !result.fromTranscript) {
     issues.push({
       level: "warn",
       text: `This looks like an application window (${result.panelsFound} panels). Choose type UI to rebuild the panels.`,

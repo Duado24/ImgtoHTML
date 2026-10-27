@@ -10,7 +10,7 @@ import { contrast, rgbToHls } from "./colors";
 import type { PaintedLine } from "./paint";
 import type { Kind, RGB } from "./types";
 
-export const SLOTS = ["text", "dim", "red", "yellow", "green", "cyan", "blue", "magenta"] as const;
+export const SLOTS = ["text", "dim", "red", "yellow", "green", "cyan", "blue", "magenta", "sky"] as const;
 export type Slot = (typeof SLOTS)[number];
 
 export interface Theme {
@@ -37,6 +37,7 @@ export const TERMINAL_THEME: Theme = {
     cyan: hex("#29b8db"),
     blue: hex("#3b8eea"),
     magenta: hex("#d670d6"),
+    sky: hex("#9cdcfe"), // light blue; only syntax highlighting uses it
   },
 };
 
@@ -54,6 +55,7 @@ export const CODE_THEME: Theme = {
     cyan: hex("#4ec9b0"), // types
     blue: hex("#569cd6"), // keywords
     magenta: hex("#c586c0"), // control flow
+    sky: hex("#9cdcfe"), // variables, properties, JSON keys
   },
 };
 

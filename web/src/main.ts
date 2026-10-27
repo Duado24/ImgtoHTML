@@ -118,6 +118,7 @@ async function run(transcriptText?: string) {
       label: labelInput.value,
       caption: captionInput.value,
       transcript: transcriptText,
+      editorWindow: $<HTMLInputElement>("window").checked,
     }, (message) => say(message), (id) => (jobId = id));
     if (/\.tiff?$/i.test(file.name)) $<HTMLImageElement>("orig").src = result.imageDataUrl;
     show(result, result.preview);

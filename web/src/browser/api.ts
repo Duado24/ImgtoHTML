@@ -6,6 +6,8 @@ export interface ConversionOptions {
   label: string;
   caption: string;
   transcript?: string;
+  /** Code: draw the editor window around the code (default true). */
+  editorWindow?: boolean;
 }
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
@@ -31,6 +33,7 @@ export async function convertOnServer(
   form.append("label", options.label);
   form.append("caption", options.caption);
   if (options.transcript !== undefined) form.append("transcript", options.transcript);
+  if (options.editorWindow === false) form.append("window", "off");
   progress("Opening the image…");
   const { id } = await json<{ id: string }>("/api/convert", { method: "POST", body: form });
   onJob?.(id);

@@ -14,7 +14,7 @@ import type { DecodedImage } from "./image";
 import type { OcrEngine } from "./ocr/engine";
 import { recognizeWords, score } from "./ocr/pipeline";
 
-type Submission = Pick<ConvertInput, "fileName" | "kind" | "label" | "caption" | "transcript">;
+type Submission = Pick<ConvertInput, "fileName" | "kind" | "label" | "caption" | "transcript" | "editorWindow">;
 const TTL = 30 * 60 * 1000;
 const MAX_RESULTS = 20;
 /** Margin (px) around a region when it is re-read on its own. */

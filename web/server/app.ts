@@ -51,7 +51,7 @@ export async function createApp(options: AppOptions = {}) {
   });
 
   await app.register(multipart, {
-    limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 4, parts: 5, fieldSize: 1024 * 1024 },
+    limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 5, parts: 6, fieldSize: 1024 * 1024 },
   });
 
   app.post("/api/convert", async (request, reply) => {
@@ -70,7 +70,7 @@ export async function createApp(options: AppOptions = {}) {
           fileName = part.filename.split(/[\\/]/).pop()!;
           image = await part.toBuffer();
         } else {
-          if (!["kind", "label", "caption", "transcript"].includes(part.fieldname) || fields.has(part.fieldname)) {
+          if (!["kind", "label", "caption", "transcript", "window"].includes(part.fieldname) || fields.has(part.fieldname)) {
             throw new InvalidImage("Unexpected or duplicate form field.");
           }
           if (part.valueTruncated || part.fieldnameTruncated) return reply.code(413).send({ error: "A form field is too large (maximum 1 MB)." });
@@ -83,6 +83,7 @@ export async function createApp(options: AppOptions = {}) {
       const decoded = await decodeImage(image, fileName);
       const id = jobs.submit({
         fileName, kind, label: fields.get("label"), caption: fields.get("caption"), transcript: fields.get("transcript"),
+        editorWindow: fields.get("window") !== "off",
       }, decoded, () => { active--; });
       submitted = true;
       return reply.code(202).header("Location", `/api/jobs/${id}`).send({ id });

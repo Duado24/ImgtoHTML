@@ -19,6 +19,7 @@ import xml from "highlight.js/lib/languages/xml";
 import yaml from "highlight.js/lib/languages/yaml";
 import type { PaintedLine, Run } from "./paint";
 import type { Slot, Theme } from "./theme";
+import type { RGB } from "./types";
 
 const LANGUAGES = { python, javascript, typescript, java, c, cpp, csharp, xml, css, sql, bash, powershell, json, yaml };
 for (const [name, language] of Object.entries(LANGUAGES)) hljs.registerLanguage(name, language);
@@ -40,12 +41,12 @@ const SCOPES: Record<string, Slot> = {
   "title.class.inherited": "cyan",
   type: "cyan",
   built_in: "cyan",
-  attr: "cyan",
+  attr: "sky",
   "selector-class": "yellow",
   "selector-tag": "blue",
-  attribute: "cyan",
-  variable: "cyan",
-  "template-variable": "cyan",
+  attribute: "sky",
+  variable: "sky",
+  "template-variable": "sky",
   subst: "text",
   params: "text",
   number: "text",
@@ -63,6 +64,18 @@ export interface CodeCleanup {
   indentUnit: number | null;
   /** Lines whose indentation was off by one space and moved to the step. */
   linesSnapped: number;
+  /** Editor text above the code (tab bar, breadcrumb), for drawing the editor window. */
+  header: string[];
+  /** Hints between code lines (VS Code's "Debug" CodeLens). */
+  hints: EditorHint[];
+  /** Number of the first code line as the editor showed it. */
+  firstLine: number;
+}
+
+export interface EditorHint {
+  /** Index of the code line the hint sits above. */
+  before: number;
+  text: string;
 }
 
 const GUTTER = /^\s*(\d{1,4})(\s+|$)/;
@@ -74,7 +87,16 @@ const AGREE = 0.6;
 /** Remove gutter line numbers when the numbered lines mostly count up by one
  *  (OCR misreads some), and the editor lines above and below them (tabs,
  *  breadcrumbs, status bar). Each line keeps its indentation after the gutter. */
-function stripGutter(lines: readonly string[]): { lines: string[]; removed: boolean; outside: number } {
+interface Gutter {
+  lines: string[];
+  removed: boolean;
+  outside: number;
+  header: string[];
+  hints: EditorHint[];
+  firstLine: number;
+}
+
+function stripGutter(lines: readonly string[]): Gutter {
   const numbered = lines.flatMap((l, i) => {
     const m = GUTTER.exec(l);
     return m ? [{ i, n: Number(m[1]), prefix: m[0].length, code: l.length > m[0].length }] : [];
@@ -83,7 +105,7 @@ function stripGutter(lines: readonly string[]): { lines: string[]; removed: bool
   for (let k = 1; k < numbered.length; k++) if (numbered[k]!.n === numbered[k - 1]!.n + 1) counting++;
   const filled = lines.filter((l) => l.trim()).length;
   if (numbered.length < 3 || counting < (numbered.length - 1) * AGREE || numbered.length < filled * 0.5) {
-    return { lines: [...lines], removed: false, outside: 0 };
+    return { lines: [...lines], removed: false, outside: 0, header: [], hints: [], firstLine: 1 };
   }
   // Where the code starts: the narrowest gutter among numbered lines whose
   // code starts like code (a misread such as "13 |" must not move it).
@@ -105,10 +127,28 @@ function stripGutter(lines: readonly string[]): { lines: string[]; removed: bool
     if (m[0].length >= column - 1 || !/[\p{L}\p{N}]/u.test(l.slice(m[0].length, column))) return l.slice(column);
     return l;
   };
+  const out: string[] = [];
+  const hints: EditorHint[] = [];
+  // The first line's number: the most common (number − position), so misread numbers don't shift it.
+  const offsets = new Map<number, number>();
+  for (let i = first; i <= last; i++) {
+    const l = lines[i]!;
+    if (hint.has(i)) {
+      hints.push({ before: out.length, text: l.trim() });
+      continue;
+    }
+    const m = GUTTER.exec(l);
+    if (m) offsets.set(Number(m[1]) - out.length, (offsets.get(Number(m[1]) - out.length) ?? 0) + 1);
+    out.push(cut(l));
+  }
+  const [offset] = [...offsets].reduce((best, o) => (o[1] > best[1] ? o : best), [1, 0]);
   return {
-    lines: lines.slice(first, last + 1).flatMap((l, k) => (hint.has(first + k) ? [] : [cut(l)])),
+    lines: out,
     removed: true,
     outside: lines.slice(0, first).filter((l) => l.trim()).length + lines.slice(last + 1).filter((l) => l.trim()).length + hint.size,
+    header: lines.slice(0, first).map((l) => l.trim()).filter(Boolean),
+    hints,
+    firstLine: Math.max(1, offset),
   };
 }
 
@@ -149,6 +189,9 @@ export function cleanCode(lines: readonly string[]): CodeCleanup {
     linesOutsideCode: gutter.outside,
     indentUnit: indent.unit,
     linesSnapped: indent.snapped,
+    header: gutter.header,
+    hints: gutter.hints,
+    firstLine: gutter.firstLine,
   };
 }
 
@@ -178,6 +221,47 @@ export function detectLanguage(code: string): string | null {
 const unescape = (text: string) =>
   text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
 
+/** JSON only: a lone letter or mark where a brace must be (OCR reads "{" as "t",
+ *  "}" as "b"). The file must open with "{" or "["; a lone character that
+ *  leaves braces unbalanced closes one. Returns the lines and how many changed. */
+export function repairJsonBraces(lines: readonly string[]): { lines: string[]; repaired: number } {
+  const out = [...lines];
+  let repaired = 0;
+  const lone = (l: string) => /^\s*[^\s"{}[\]]{1,2}\s*$/.test(l);
+  const first = out.findIndex((l) => l.trim());
+  if (first >= 0 && lone(out[first]!) && !/^\s*[{[]/.test(out[first]!)) {
+    out[first] = out[first]!.replace(/\S+/, "{");
+    repaired++;
+  }
+  let depth = 0;
+  for (const [i, l] of out.entries()) {
+    if (i !== first && lone(l) && depth > 0) {
+      out[i] = l.replace(/\S+/, "}");
+      repaired++;
+    }
+    for (const c of out[i]!.replace(/"(?:\\.|[^"\\])*"/g, "")) depth += c === "{" || c === "[" ? 1 : c === "}" || c === "]" ? -1 : 0;
+  }
+  return { lines: out, repaired };
+}
+
+/** VS Code's bracket pair colors, by nesting depth. */
+const BRACKETS: readonly RGB[] = [[0xff, 0xd7, 0x00], [0xda, 0x70, 0xd6], [0x17, 0x9f, 0xff]];
+
+/** Color brackets outside strings and comments by depth, as VS Code does. */
+function colorBrackets(lines: Run[][]): Run[][] {
+  let depth = 0;
+  return lines.map((runs) =>
+    runs.flatMap((run) => {
+      if (run.color) return [run];
+      return (run.text.match(/[{}[\]()]|[^{}[\]()]+/g) ?? []).map((text): Run => {
+        if (/[{[(]/.test(text)) return { text, color: BRACKETS[depth++ % BRACKETS.length] };
+        if (/[}\])]/.test(text)) return { text, color: BRACKETS[(depth = Math.max(0, depth - 1)) % BRACKETS.length] };
+        return { text };
+      });
+    }),
+  );
+}
+
 /** Highlight `code` and return one painted line per line, in the theme's colors. */
 export function highlightCode(code: string, language: string | null, theme: Theme): PaintedLine[] {
   const html = language ? hljs.highlight(code, { language, ignoreIllegals: true }).value : code.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -197,5 +281,5 @@ export function highlightCode(code: string, language: string | null, theme: Them
       }
     }
   }
-  return lines.map((runs) => ({ runs }));
+  return colorBrackets(lines).map((runs) => ({ runs }));
 }

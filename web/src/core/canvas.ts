@@ -35,12 +35,12 @@ const ALLOWED_CSS = new Set([
   "background", "background-color", "border", "border-top", "border-right", "border-bottom",
   "border-left", "border-color", "border-style", "border-width", "border-radius",
   "border-collapse", "box-sizing", "color", "display", "flex", "flex-wrap", "flex-direction",
-  "flex-grow", "flex-shrink", "flex-basis", "font", "font-family", "font-size", "font-style",
+  "flex-grow", "flex-shrink", "flex-basis", "float", "font", "font-family", "font-size", "font-style",
   "font-weight", "height", "letter-spacing", "line-height", "list-style", "list-style-type",
   "margin", "margin-top", "margin-right", "margin-bottom", "margin-left", "max-height",
   "max-width", "min-height", "min-width", "overflow", "overflow-x", "overflow-y",
   "overflow-wrap", "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
-  "text-align", "text-decoration", "text-indent", "vertical-align", "white-space", "width",
+  "table-layout", "text-align", "text-decoration", "text-indent", "vertical-align", "white-space", "width",
   "word-break",
 ]);
 
