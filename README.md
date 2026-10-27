@@ -33,6 +33,20 @@ engines and the application operate locally, including the first conversion.
 
 ## Run
 
+**One step:** double-click `ImgtoHTML.bat` in Windows Explorer, or in WSL run
+
+    bash web/start.sh        # or: cd web && npm run app
+
+It starts the vision model server (Ollama, from `~/.local/ollama` or PATH) if
+it isn't running, rebuilds the app when the code changed, starts it at
+http://localhost:3000 and opens the browser. Ctrl+C (or closing the window)
+stops what it started. Without Ollama or the model it runs OCR only and says
+so. `NO_BROWSER=1` skips the browser; `IMGTOHTML_VISION=off` skips the model.
+
+The vision model is downloaded once (about 6 GB):
+
+    ~/.local/ollama/bin/ollama pull qwen3-vl:8b-instruct-q4_K_M
+
 For development, start the server and Vite together:
 
     cd web
