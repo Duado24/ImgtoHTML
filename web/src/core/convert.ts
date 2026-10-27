@@ -7,6 +7,7 @@ import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./color
 import { layoutWords, type UncertainWord } from "./layout";
 import { buildModel, flagsByRegion, type ScreenshotModel } from "./model";
 import { colorRoles } from "./terminal";
+import { mergeVision, type RegionReading } from "./vision";
 import { applyTheme, themeFor } from "./theme";
 import { colorsUsed, mainColor, measureLooks, paintLines, plainLines, type PaintedLine, type WordLook } from "./paint";
 import { learnedUsernames, sanitizeLines, sanitizeText } from "./privacy";
@@ -59,6 +60,8 @@ export interface Review {
   canvas_issues: CanvasIssue[];
   /** Regions with flagged text, least confident first (details in the model file). */
   regions_to_review: { region: string; confidence: number | null; flags: number }[];
+  /** The vision model that also read the screenshot, or null when none ran. */
+  vision: { model: string; regions_read: number; error?: string } | null;
   privacy: {
     home_path_masking: boolean;
     learned_email_identity_masking: boolean;
@@ -245,7 +248,8 @@ export function convert(input: ConvertInput): ConvertResult {
     check_colors_by_hand: !theme && measured.secondaryRatio >= 0.3,
     contrast_ratio: round2(contrast(boxText, boxBackground)),
     canvas_issues: checkCanvasSafe(html),
-    regions_to_review: flagsByRegion(model).map((r) => ({ region: r.region, confidence: r.confidence, flags: r.flags.length })),
+    regions_to_review: regionsToReview(model),
+    vision: null,
     privacy: {
       home_path_masking: true,
       learned_email_identity_masking: true,
@@ -289,6 +293,31 @@ export function convert(input: ConvertInput): ConvertResult {
   };
 }
 
+const regionsToReview = (model: ScreenshotModel) =>
+  flagsByRegion(model).map((r) => ({ region: r.region, confidence: r.confidence, flags: r.flags.length }));
+
+/** Add a vision model's readings (or why it couldn't run) to a result.
+ *  The HTML and transcript stay as OCR read them. */
+export function addVision(result: ConvertResult, model: string, readings: readonly RegionReading[], error?: string): ConvertResult {
+  // The vision model reads the original pixels, so mask usernames in its text
+  // too, learning names from every region (a path in one, an email in another).
+  const names = learnedUsernames(readings.flatMap((r) => r.text.split("\n")));
+  const masked = readings.map((r) => ({ ...r, text: r.text.split("\n").map((l) => sanitizeText(l, names)).join("\n") }));
+  const merged = mergeVision(result.model, masked);
+  const review: Review = {
+    ...result.review,
+    regions_to_review: regionsToReview(merged),
+    vision: { model, regions_read: readings.length, ...(error ? { error } : {}) },
+  };
+  return {
+    ...result,
+    review,
+    model: merged,
+    reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) },
+    modelFile: { ...result.modelFile, content: JSON.stringify(merged, null, 2) },
+  };
+}
+
 // ------------------------------------------------------------
 // What the page shows (was summarize() in web.py)
 // ------------------------------------------------------------
@@ -306,6 +335,17 @@ export function issuesFor(result: ConvertResult): Issue[] {
 
   if (words.length) {
     issues.push({ level: "error", text: `${words.length} low-confidence words — check these first.`, words });
+  }
+  if (review.vision?.error) {
+    issues.push({ level: "warn", text: `Vision model didn't run (${review.vision.error}); OCR only.` });
+  }
+  const disagree = result.model.regions.flatMap((r) => r.flags).filter((f) => f.reason === "sources-disagree");
+  if (disagree.length) {
+    issues.push({
+      level: "error",
+      text: `${disagree.length} ${disagree.length === 1 ? "word reads" : "words read"} differently to OCR and the vision model — check these.`,
+      words: disagree.map((f) => f.detail),
+    });
   }
   const fixes = result.model.regions.flatMap((r) => r.flags).filter((f) => f.reason === "suggested-fix");
   if (fixes.length) {

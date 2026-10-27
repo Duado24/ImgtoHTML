@@ -1,3 +1,4 @@
+import { NullVisionModel } from "../server/vision";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -21,7 +22,7 @@ const words: OcrWord[] = [
 const scaledWords = words.map((w) => ({ ...w, x: (w.x + 8) * 3, y: (w.y + 8) * 3, width: w.width * 3, height: w.height * 3 }));
 
 async function setup(engine: OcrEngine = { recognize: vi.fn().mockResolvedValue(scaledWords) }) {
-  const app = await createApp({ ocr: engine, clientRoot: false });
+  const app = await createApp({ ocr: engine, vision: new NullVisionModel(), clientRoot: false });
   apps.push(app);
   const pixels = new FakeImage(300, 80, [30, 30, 30]);
   for (const w of words) pixels.fill(w.x, w.y, w.x + w.width - 1, w.y + w.height - 1, [212, 212, 212]);
@@ -195,7 +196,7 @@ describe("local conversion API / Python parity", () => {
     const directory = await mkdtemp(join(tmpdir(), "imgtohtml-static-test-"));
     try {
       await writeFile(join(directory, "index.html"), "<!doctype html><title>Local app</title>");
-      const app = await createApp({ clientRoot: directory, ocr: { recognize: async () => [] } });
+      const app = await createApp({ clientRoot: directory, ocr: { recognize: async () => [] }, vision: new NullVisionModel() });
       apps.push(app);
       expect((await app.inject("/")).body).toContain("Local app");
       expect((await app.inject("/server/app.ts")).statusCode).toBe(404);

@@ -8,12 +8,15 @@ import { decodeImage, InvalidImage } from "./image";
 import { Jobs } from "./jobs";
 import { LocalOcr } from "./ocr";
 import type { OcrEngine } from "./ocr/engine";
+import { NullVisionModel, OllamaVisionModel, type VisionModel } from "./vision";
 
 export const HOST = "127.0.0.1";
 export const PORT = 3000;
 
 interface AppOptions {
   ocr?: OcrEngine;
+  /** Default: Ollama on this computer, unless IMGTOHTML_VISION=off. */
+  vision?: VisionModel;
   /** false for API-only tests; the default is the Vite build directory. */
   clientRoot?: string | false;
   logger?: boolean;
@@ -21,7 +24,8 @@ interface AppOptions {
 
 export async function createApp(options: AppOptions = {}) {
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: MAX_UPLOAD_BYTES });
-  const jobs = new Jobs(options.ocr ?? new LocalOcr());
+  const vision = options.vision ?? (process.env.IMGTOHTML_VISION === "off" ? new NullVisionModel() : new OllamaVisionModel());
+  const jobs = new Jobs(options.ocr ?? new LocalOcr(), vision);
   let active = 0;
   app.addHook("onClose", async () => { await jobs.close(); });
 

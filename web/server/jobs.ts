@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setImmediate } from "node:timers/promises";
-import { convert, previewPage, type ConvertInput } from "../src/core/convert";
+import { addVision, convert, previewPage, type ConvertInput } from "../src/core/convert";
+import { NullVisionModel, type VisionModel } from "./vision";
 import type { Job } from "../src/shared/api";
 import type { DecodedImage } from "./image";
 import type { OcrEngine } from "./ocr/engine";
@@ -16,7 +17,10 @@ export class Jobs {
   private readonly entries = new Map<string, { job: Job; finished?: number }>();
   private tail = Promise.resolve();
 
-  constructor(private readonly engine: OcrEngine) {}
+  constructor(
+    private readonly engine: OcrEngine,
+    private readonly vision: VisionModel = new NullVisionModel(),
+  ) {}
 
   get(id: string): Job | undefined {
     this.prune();
@@ -44,7 +48,16 @@ export class Jobs {
         const words = await recognizeWords(this.engine, image.pixels, (progress) => {
           entry.job = { id, status: "running", progress };
         });
-        const result = convert({ ...input, pixels: image.pixels, animated: image.animated, words });
+        let result = convert({ ...input, pixels: image.pixels, animated: image.animated, words });
+        if (!(this.vision instanceof NullVisionModel)) {
+          entry.job = { id, status: "running", progress: "Checking with the vision model…" };
+          const regions = result.model.regions.filter((r) => r.lines.length).map(({ id, box }) => ({ id, box }));
+          try {
+            result = addVision(result, this.vision.name, await this.vision.analyze(image.pixels, regions));
+          } catch (error) {
+            result = addVision(result, this.vision.name, [], error instanceof Error ? error.message : String(error));
+          }
+        }
         const imageDataUrl = `data:image/png;base64,${image.png.toString("base64")}`;
         entry.job = { id, status: "completed", result: { ...result, imageDataUrl, preview: previewPage(result, imageDataUrl) } };
       } catch (error) {
