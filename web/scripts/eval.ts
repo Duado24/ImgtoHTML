@@ -108,17 +108,21 @@ const regressions: string[] = [];
 console.table(
   entries.map((e) => {
     const old = before.get(e.file);
-    const delta = e.text && old?.text ? e.text.cer - old.text.cer : null;
-    if (delta !== null && delta > TOLERANCE) regressions.push(`${e.file}: CER ${pct(old!.text!.cer)} → ${pct(e.text!.cer)}`);
+    // Gate on letters, not spacing: expected .txt files often space columns
+    // differently from the screenshot, which makes exact CER noisy.
+    const delta = e.text && old?.text ? e.text.cerIgnoringSpaces - old.text.cerIgnoringSpaces : null;
+    if (delta !== null && delta > TOLERANCE) {
+      regressions.push(`${e.file}: CER ignoring spaces ${pct(old!.text!.cerIgnoringSpaces)} → ${pct(e.text!.cerIgnoringSpaces)}`);
+    }
     for (const error of e.canvasErrors) {
       if (old && !old.canvasErrors.includes(error)) regressions.push(`${e.file}: new Canvas error: ${error}`);
     }
     return {
       file: e.file,
       kind: e.kind,
-      CER: e.text ? pct(e.text.cer) : "-",
-      "vs base": delta === null ? "" : `${delta > 0 ? "+" : ""}${pct(delta)}`,
       "CER no spaces": e.text ? pct(e.text.cerIgnoringSpaces) : "-",
+      "vs base": delta === null ? "" : `${delta > 0 ? "+" : ""}${pct(delta)}`,
+      CER: e.text ? pct(e.text.cer) : "-",
       "lines exact": e.text ? pct(e.text.lineAccuracy) : "-",
       confusable: e.text?.confusable?.length ?? "-",
       "low conf": e.lowConfidence,

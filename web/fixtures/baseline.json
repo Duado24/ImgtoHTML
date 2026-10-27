@@ -1,0 +1,1588 @@
+[
+  {
+    "file": "batch-1/4.2ExampleRun.gif",
+    "kind": "terminal",
+    "seconds": 1.6,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/4.3ErrorRun.gif",
+    "kind": "terminal",
+    "seconds": 1.3,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/4.3ExampleRun.gif",
+    "kind": "terminal",
+    "seconds": 1.2,
+    "lowConfidence": 1,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/6.8 add button pressed.png",
+    "kind": "terminal",
+    "seconds": 2.4,
+    "lowConfidence": 13,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/6.8 part 4 add time.png",
+    "kind": "terminal",
+    "seconds": 1.2,
+    "lowConfidence": 11,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Actions 15.png",
+    "kind": "terminal",
+    "seconds": 0.2,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Auto Save.png",
+    "kind": "terminal",
+    "seconds": 0.3,
+    "lowConfidence": 1,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Autograde 18.png",
+    "kind": "terminal",
+    "seconds": 1.9,
+    "lowConfidence": 16,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Changed name to Katie.png",
+    "kind": "terminal",
+    "seconds": 0.7,
+    "lowConfidence": 7,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/ChatGPT Image Nov 10, 2025, 08_31_23 AM.png",
+    "kind": "terminal",
+    "seconds": 3.9,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/CreateAssigments.png",
+    "kind": "terminal",
+    "seconds": 0.9,
+    "lowConfidence": 13,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/CreateClassroom.png",
+    "kind": "terminal",
+    "seconds": 0.6,
+    "lowConfidence": 1,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Digital IO Connection Troubleshooting.png",
+    "kind": "terminal",
+    "seconds": 12.3,
+    "lowConfidence": 10,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Exit Windows Powershell.png",
+    "kind": "terminal",
+    "seconds": 2.4,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Failure 17.png",
+    "kind": "terminal",
+    "seconds": 1.5,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Finish code 15.png",
+    "kind": "terminal",
+    "seconds": 0.6,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/FlowchartMonitorButton.drawio.png",
+    "kind": "terminal",
+    "seconds": 3.1,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Git Commit.png",
+    "kind": "terminal",
+    "seconds": 2.1,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Git fetch_ no.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 1,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Git log oneline.png",
+    "kind": "terminal",
+    "seconds": 0.7,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Git tracks changes flowchart.png",
+    "kind": "terminal",
+    "seconds": 1.9,
+    "lowConfidence": 24,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/Github Classroom 13.png",
+    "kind": "terminal",
+    "seconds": 2,
+    "lowConfidence": 29,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/classroomAssignments.png",
+    "kind": "terminal",
+    "seconds": 0.5,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/directory.png",
+    "kind": "terminal",
+    "seconds": 2.1,
+    "lowConfidence": 15,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-1/ensign college 1.png",
+    "kind": "terminal",
+    "seconds": 0.6,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart1-1.png",
+    "kind": "terminal",
+    "seconds": 0.8,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart1-2.png",
+    "kind": "terminal",
+    "seconds": 0.6,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart1-3.png",
+    "kind": "terminal",
+    "seconds": 0.7,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart1.png",
+    "kind": "terminal",
+    "seconds": 0.4,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart2.png",
+    "kind": "terminal",
+    "seconds": 0.8,
+    "lowConfidence": 1,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart3-1.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 3,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart3.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart4.png",
+    "kind": "terminal",
+    "seconds": 1.2,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart5-1.png",
+    "kind": "terminal",
+    "seconds": 0.9,
+    "lowConfidence": 3,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart5-2.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart5.png",
+    "kind": "terminal",
+    "seconds": 0.9,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart6-1.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart6-2.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GitRepoFlowchart6.png",
+    "kind": "terminal",
+    "seconds": 1.1,
+    "lowConfidence": 3,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/GroupAssignmentSettings.png",
+    "kind": "terminal",
+    "seconds": 0.5,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/Homepage banner.jpg",
+    "kind": "terminal",
+    "seconds": 2.4,
+    "lowConfidence": 117,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/Identity_1.png",
+    "kind": "terminal",
+    "seconds": 0.8,
+    "lowConfidence": 11,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/Identity_2.png",
+    "kind": "terminal",
+    "seconds": 0.9,
+    "lowConfidence": 9,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/Identity_3.png",
+    "kind": "terminal",
+    "seconds": 1.4,
+    "lowConfidence": 3,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/image-04f5bb11-d93d-4972-afe1-f23800a0d3a2.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/image-1e72988d-ebbd-419b-906f-3291f26ced3e.png",
+    "kind": "terminal",
+    "seconds": 3,
+    "lowConfidence": 21,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/image-2.png",
+    "kind": "terminal",
+    "seconds": 1.4,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/image-3.png",
+    "kind": "terminal",
+    "seconds": 1.2,
+    "lowConfidence": 3,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/image-4.png",
+    "kind": "terminal",
+    "seconds": 1.1,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-2/image-4de92605-4196-414d-8793-2114034af829.png",
+    "kind": "terminal",
+    "seconds": 1.2,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-0579b8f5-aa24-4ae1-9255-edc3c686c133.png",
+    "kind": "terminal",
+    "seconds": 1.9,
+    "lowConfidence": 15,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-0693b9ff-31d4-4436-941f-911b007869a0.png",
+    "kind": "terminal",
+    "seconds": 1.8,
+    "lowConfidence": 33,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-222cfe12-03e5-42c8-b634-cd672aed3ae9.png",
+    "kind": "terminal",
+    "seconds": 0.3,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-281cf7da-0210-43af-9e9c-1c673df7c339.png",
+    "kind": "terminal",
+    "seconds": 2.1,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-332f8cac-f386-4db3-9df0-5de88a23bf22.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 1,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-40de22be-8853-468b-9fba-130da42f8516.png",
+    "kind": "terminal",
+    "seconds": 2.3,
+    "lowConfidence": 6,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-443f863c-9abd-443e-a039-fad8f470e23c.png",
+    "kind": "terminal",
+    "seconds": 1.5,
+    "lowConfidence": 12,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-44d33793-b441-4962-90c7-739e84abfce4.png",
+    "kind": "terminal",
+    "seconds": 1.1,
+    "lowConfidence": 9,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-49a7e95f-edac-410b-a1a4-3ae30ee882a9.png",
+    "kind": "terminal",
+    "seconds": 2.2,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-5.png",
+    "kind": "terminal",
+    "seconds": 0.7,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-506fb7e1-adce-4072-9a92-7f0cf8202364.png",
+    "kind": "terminal",
+    "seconds": 3.1,
+    "lowConfidence": 36,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-52daca70-9be0-4ee4-b16a-66f65fc5b5c4.png",
+    "kind": "terminal",
+    "seconds": 1.2,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-54eca947-007c-4797-8ea2-bc2a6bc764c0.png",
+    "kind": "terminal",
+    "seconds": 3.1,
+    "lowConfidence": 10,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-5934d56c-5a22-49b3-9294-9331c6b02638.png",
+    "kind": "terminal",
+    "seconds": 0.9,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-6.png",
+    "kind": "terminal",
+    "seconds": 2.3,
+    "lowConfidence": 3,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-698be3dc-e7a5-4161-b818-dc5ad9ef2323.png",
+    "kind": "terminal",
+    "seconds": 3.5,
+    "lowConfidence": 25,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-6d1a3b4f-9dd6-41e1-b515-167f2afb494e.png",
+    "kind": "terminal",
+    "seconds": 1.7,
+    "lowConfidence": 34,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-6d826d92-aced-4467-a87d-50e33eddd76a.png",
+    "kind": "terminal",
+    "seconds": 0.3,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-7.png",
+    "kind": "terminal",
+    "seconds": 1.5,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-90a3eed8-50e7-4d18-9902-4ec7628e1345.png",
+    "kind": "terminal",
+    "seconds": 2,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-a5f5f75f-93fa-4b15-bbdc-4f24a538846c.png",
+    "kind": "terminal",
+    "seconds": 1.5,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-a8b25925-cc5d-439a-a4eb-dd6c5d008941.png",
+    "kind": "terminal",
+    "seconds": 0.4,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-aeddf729-f9e9-4c99-91da-66752e383995.png",
+    "kind": "terminal",
+    "seconds": 2.1,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-c1dad373-0207-4a83-a5c5-855024a05071.png",
+    "kind": "terminal",
+    "seconds": 2.7,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-3/image-c5beecb2-73a9-4df4-9399-71ce9b262244.png",
+    "kind": "terminal",
+    "seconds": 2,
+    "lowConfidence": 22,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/LS.png",
+    "kind": "terminal",
+    "seconds": 0.8,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/ListTAandAdmins.png",
+    "kind": "terminal",
+    "seconds": 0.6,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/Mkdir new folder.png",
+    "kind": "terminal",
+    "seconds": 1.1,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/NewAssigmentLocation.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 11,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/NewClassroom.png",
+    "kind": "terminal",
+    "seconds": 2.1,
+    "lowConfidence": 6,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/image-c3227470-df66-4cdb-b5c8-288ae4be0057.png",
+    "kind": "terminal",
+    "seconds": 0.5,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/image-c449f286-1dbf-45b1-8297-3eb95a06e8d3.png",
+    "kind": "terminal",
+    "seconds": 1.5,
+    "lowConfidence": 15,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/image-c5984450-d507-477d-892f-84041df6db01.png",
+    "kind": "terminal",
+    "seconds": 1.9,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/image-d436ece8-cd45-4650-af05-c0076322221c.png",
+    "kind": "terminal",
+    "seconds": 1.8,
+    "lowConfidence": 3,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/image-d71fa3c9-043d-4113-94d1-b05820c73cea.png",
+    "kind": "terminal",
+    "seconds": 0.4,
+    "lowConfidence": 1,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/image-d86ddfa2-db7d-477f-9c9a-d9fa4527de30.png",
+    "kind": "terminal",
+    "seconds": 1.6,
+    "lowConfidence": 15,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/image-db4de849-bbd7-44fd-9771-e300a70946b9.png",
+    "kind": "terminal",
+    "seconds": 8.2,
+    "lowConfidence": 26,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/image-e360e8bc-871c-4925-a3b8-baeb385f66db.png",
+    "kind": "terminal",
+    "seconds": 3.4,
+    "lowConfidence": 25,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/image-f0fdc73e-9a31-4998-9ead-c9484c5e0d1e.png",
+    "kind": "terminal",
+    "seconds": 0.5,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/image-fc3fb753-68fe-4d85-b4a0-dc5da5c09843.png",
+    "kind": "terminal",
+    "seconds": 1.4,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/image.png",
+    "kind": "terminal",
+    "seconds": 5.6,
+    "lowConfidence": 16,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/install git.gif",
+    "kind": "terminal",
+    "seconds": 3.3,
+    "lowConfidence": 6,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/introRaspCommand.gif",
+    "kind": "terminal",
+    "seconds": 3.5,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/neofetch.gif",
+    "kind": "terminal",
+    "seconds": 3.6,
+    "lowConfidence": 29,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/ok, don't show again 13.3.png",
+    "kind": "terminal",
+    "seconds": 0.9,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/pi instructions.02-1.png",
+    "kind": "terminal",
+    "seconds": 2,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/pi instructions.02.png",
+    "kind": "terminal",
+    "seconds": 2,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/pi instructions.03.2.png",
+    "kind": "terminal",
+    "seconds": 2.8,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/pi instructions.04-1.png",
+    "kind": "terminal",
+    "seconds": 8.8,
+    "lowConfidence": 20,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-4/pi instructions.04.png",
+    "kind": "terminal",
+    "seconds": 9.6,
+    "lowConfidence": 20,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": null
+  },
+  {
+    "file": "batch-5/PickAssigments.png",
+    "kind": "terminal",
+    "seconds": 1.6,
+    "lowConfidence": 16,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 2.225177304964539,
+      "cerIgnoringSpaces": 0.2702702702702703,
+      "lineAccuracy": 0.03125,
+      "confusable": [
+        "N→~",
+        "c→—",
+        "l→E",
+        "r→—",
+        "o→␠",
+        "o→=",
+        "m→i",
+        "C→i",
+        "S→‘",
+        "2→C",
+        "2→␠",
+        "0→a",
+        "-→O",
+        "W→l",
+        "∅→;",
+        "n→‘",
+        "e→‘",
+        "-→—",
+        "2→M",
+        "0→~",
+        "2→t",
+        "-→~",
+        "S→<",
+        "1→a",
+        "⏎→“",
+        "n→“",
+        "i→“",
+        "n→“",
+        "-→3",
+        "C→—",
+        "o→N",
+        "l→~",
+        "l→S",
+        "e→~",
+        "g→;",
+        "C→Z",
+        "r→;",
+        "t→~",
+        "y→O",
+        "o→l",
+        "r→l",
+        "∅→S",
+        "i→e",
+        "∅→S",
+        "∅→2",
+        "∅→2",
+        "∅→0",
+        "∅→-",
+        "∅→i",
+        "∅→-",
+        "∅→2",
+        "∅→0",
+        "∅→2",
+        "u→-",
+        "s→S",
+        "∅→1",
+        "∅→-",
+        "∅→o",
+        "∅→l",
+        "m→l",
+        "-→∅",
+        "∅→o",
+        "∅→i",
+        "∅→i",
+        "l→t"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/Programming Lifecycle.png",
+    "kind": "terminal",
+    "seconds": 5.1,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 1.0923076923076922,
+      "cerIgnoringSpaces": 0.8153846153846154,
+      "lineAccuracy": 0,
+      "confusable": [
+        "1→h",
+        ".→e",
+        "d→o",
+        "⏎→i",
+        "2→n",
+        ".→g",
+        "l→L",
+        "a→i",
+        ".→y",
+        "B→l",
+        "i→⏎",
+        "l→⏎",
+        "␠→S",
+        "5→2",
+        "u→l",
+        ".→4",
+        "S→∅",
+        "e→l"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/ReUseAssigment.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 11,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 1.8699186991869918,
+      "cerIgnoringSpaces": 0.3924050632911392,
+      "lineAccuracy": 0.07142857142857142,
+      "confusable": [
+        "2→␠",
+        ":→∅",
+        ":→∅",
+        "l→⏎",
+        "s→S",
+        "o→∅",
+        "o→∅",
+        "i→∅",
+        "-→∅",
+        "o→∅",
+        "l→∅",
+        "l→∅",
+        "y→S",
+        "o→2",
+        "u→2",
+        "r→0",
+        "i→n",
+        "n→-",
+        "⏎→o",
+        "C→l",
+        "S→l",
+        "2→e",
+        "2→g",
+        "0→e",
+        "∅→o",
+        "∅→i",
+        "∅→~"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/SampleFlowchart.png",
+    "kind": "terminal",
+    "seconds": 3.8,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.6428571428571429,
+      "cerIgnoringSpaces": 0.6190476190476191,
+      "lineAccuracy": 0.6666666666666666,
+      "confusable": [
+        "S→∅",
+        "i→∅",
+        "i→∅",
+        "o→∅",
+        "i→∅",
+        "o→∅",
+        "i→⏎",
+        "o→⏎"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/Screenshot 2024-03-05 at 10.27.12 AM.png",
+    "kind": "terminal",
+    "seconds": 6.7,
+    "lowConfidence": 14,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 1.854054054054054,
+      "cerIgnoringSpaces": 0.2644320297951583,
+      "lineAccuracy": 0,
+      "confusable": [
+        "l→∅",
+        "o→4",
+        "o→\\",
+        "∅→|",
+        "∅→|",
+        "S→⏎",
+        "2→⏎",
+        "2→⏎",
+        "0→⏎",
+        "i→∅",
+        "∅→0",
+        "∅→o",
+        "∅→i",
+        "∅→i",
+        "∅→l",
+        "∅→i",
+        "∅→O",
+        "∅→S",
+        "∅→2",
+        "∅→2",
+        "∅→0",
+        "∅→-",
+        "∅→-",
+        "∅→0",
+        "∅→2",
+        "∅→o",
+        "∅→O",
+        "S→∅",
+        "2→∅",
+        "2→∅",
+        "0→∅",
+        "-→␠",
+        "C→O",
+        "-→∅",
+        "0→⏎",
+        "2→@",
+        "∅→2",
+        "o→∅",
+        "i→∅",
+        "i→∅",
+        "l→∅",
+        "i→∅"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/Screenshot 2024-03-05 at 10.32.07 AM.png",
+    "kind": "terminal",
+    "seconds": 4.2,
+    "lowConfidence": 6,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.92,
+      "cerIgnoringSpaces": 0.359375,
+      "lineAccuracy": 0.058823529411764705,
+      "confusable": [
+        "S→∅",
+        "2→∅",
+        "2→∅",
+        "0→⏎",
+        "-→⏎",
+        "-→⏎",
+        "0→⏎",
+        "1→A",
+        "l→v",
+        "⏎→i",
+        "i→(",
+        "o→E",
+        "n→i",
+        "l→t",
+        "o→⏎",
+        "0→A",
+        "o→e",
+        "5→s",
+        "␠→i",
+        "⏎→i",
+        "a→i",
+        "g→o",
+        "S→s",
+        "∅→5",
+        "∅→0",
+        "s→o",
+        "i→t",
+        "t→5",
+        "i→␠",
+        "i→d",
+        "o→e",
+        "S→s",
+        "s→5",
+        "5→∅",
+        "5→∅",
+        "␠→—",
+        "P→—",
+        "a→—",
+        "∅→~",
+        "∅→~"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/Screenshot 2024-03-05 at 10.33.32 AM.png",
+    "kind": "terminal",
+    "seconds": 0.6,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 4.84375,
+      "cerIgnoringSpaces": 0.3448275862068966,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→o",
+        "∅→-",
+        "∅→O"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/Screenshot 2024-03-05 at 10.37.08 AM.png",
+    "kind": "terminal",
+    "seconds": 0.7,
+    "lowConfidence": 7,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 1.1958762886597938,
+      "cerIgnoringSpaces": 0.16470588235294117,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→o",
+        "1→X",
+        "∅→-",
+        "∅→1"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/Screenshot 2024-05-06 at 10.34.02 PM.png",
+    "kind": "terminal",
+    "seconds": 6.7,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.675603217158177,
+      "cerIgnoringSpaces": 0.13855421686746988,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→o",
+        "S→s",
+        ".→∅"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/Screenshot 2024-08-19 at 10.45.54 AM.png",
+    "kind": "terminal",
+    "seconds": 0.7,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.8913043478260869,
+      "cerIgnoringSpaces": 0.2032520325203252,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→o",
+        "∅→i"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/Screenshot 2024-08-19 at 10.54.42 AM.png",
+    "kind": "terminal",
+    "seconds": 3.3,
+    "lowConfidence": 5,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 1.445945945945946,
+      "cerIgnoringSpaces": 0.20588235294117646,
+      "lineAccuracy": 0.16666666666666666,
+      "confusable": [
+        "∅→o",
+        "S→⏎",
+        "1→⏎",
+        "0→⏎",
+        "5→⏎"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.05-1.png",
+    "kind": "terminal",
+    "seconds": 5.7,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 1.85,
+      "cerIgnoringSpaces": 0.2894736842105263,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→\"",
+        "∅→0"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.05.png",
+    "kind": "terminal",
+    "seconds": 5.8,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 1.85,
+      "cerIgnoringSpaces": 0.2894736842105263,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→\"",
+        "∅→0"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.06-1.png",
+    "kind": "terminal",
+    "seconds": 2.2,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.5555555555555556,
+      "cerIgnoringSpaces": 0.11403508771929824,
+      "lineAccuracy": 0,
+      "confusable": [
+        "S→∅",
+        "O→∅"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.06.png",
+    "kind": "terminal",
+    "seconds": 2.2,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.5555555555555556,
+      "cerIgnoringSpaces": 0.11403508771929824,
+      "lineAccuracy": 0,
+      "confusable": [
+        "S→∅",
+        "O→∅"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.07-1.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.192,
+      "cerIgnoringSpaces": 0.15126050420168066,
+      "lineAccuracy": 0.25,
+      "confusable": [
+        "i→∅",
+        "'→’",
+        "O→∅",
+        "S→∅"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.07.png",
+    "kind": "terminal",
+    "seconds": 1.1,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.192,
+      "cerIgnoringSpaces": 0.15126050420168066,
+      "lineAccuracy": 0.25,
+      "confusable": [
+        "i→∅",
+        "'→’",
+        "O→∅",
+        "S→∅"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.08-1.png",
+    "kind": "terminal",
+    "seconds": 1,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.6422764227642277,
+      "cerIgnoringSpaces": 0.15,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→,",
+        "l→⏎"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.08.png",
+    "kind": "terminal",
+    "seconds": 1.1,
+    "lowConfidence": 2,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.6422764227642277,
+      "cerIgnoringSpaces": 0.15,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→,",
+        "l→⏎"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.09-1.png",
+    "kind": "terminal",
+    "seconds": 0.8,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.49473684210526314,
+      "cerIgnoringSpaces": 0.11956521739130435,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→|",
+        "a→|",
+        "∅→|",
+        "’→'"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.09.png",
+    "kind": "terminal",
+    "seconds": 0.7,
+    "lowConfidence": 0,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.49473684210526314,
+      "cerIgnoringSpaces": 0.11956521739130435,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→|",
+        "a→|",
+        "∅→|",
+        "’→'"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.11-1.png",
+    "kind": "terminal",
+    "seconds": 5.3,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 1.0985221674876848,
+      "cerIgnoringSpaces": 0.5602094240837696,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→|",
+        "∅→8",
+        "∅→S",
+        "∅→O",
+        "a→I",
+        "∅→|",
+        "i→⏎",
+        "S→∅",
+        "B→∅",
+        "I→∅",
+        "Z→∅",
+        "O→∅",
+        "2→∅",
+        "S→∅",
+        "B→∅",
+        "I→∅",
+        "O→∅",
+        "S→∅",
+        "2→∅",
+        "-→∅",
+        "B→∅",
+        "I→∅",
+        "-→∅",
+        "S→∅",
+        "B→∅",
+        "S→∅",
+        "O→∅",
+        "I→∅",
+        "I→⏎"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.11.png",
+    "kind": "terminal",
+    "seconds": 4.9,
+    "lowConfidence": 4,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 1.0985221674876848,
+      "cerIgnoringSpaces": 0.5602094240837696,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→|",
+        "∅→8",
+        "∅→S",
+        "∅→O",
+        "a→I",
+        "∅→|",
+        "i→⏎",
+        "S→∅",
+        "B→∅",
+        "I→∅",
+        "Z→∅",
+        "O→∅",
+        "2→∅",
+        "S→∅",
+        "B→∅",
+        "I→∅",
+        "O→∅",
+        "S→∅",
+        "2→∅",
+        "-→∅",
+        "B→∅",
+        "I→∅",
+        "-→∅",
+        "S→∅",
+        "B→∅",
+        "S→∅",
+        "O→∅",
+        "I→∅",
+        "I→⏎"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.12-1.png",
+    "kind": "terminal",
+    "seconds": 5.1,
+    "lowConfidence": 3,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.6836734693877551,
+      "cerIgnoringSpaces": 0.17616580310880828,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→S",
+        "i→∅",
+        "S→⏎",
+        "l→A"
+      ]
+    }
+  },
+  {
+    "file": "batch-5/pi instructions.12.png",
+    "kind": "terminal",
+    "seconds": 5.3,
+    "lowConfidence": 3,
+    "canvasErrors": [],
+    "canvasWarnings": [],
+    "text": {
+      "cer": 0.6836734693877551,
+      "cerIgnoringSpaces": 0.17616580310880828,
+      "lineAccuracy": 0,
+      "confusable": [
+        "∅→S",
+        "i→∅",
+        "S→⏎",
+        "l→A"
+      ]
+    }
+  }
+]
