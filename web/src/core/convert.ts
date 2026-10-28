@@ -321,7 +321,7 @@ export function convert(input: ConvertInput): ConvertResult {
         const gutterWidth = codeStarts.length >= 3 ? Math.max(20, Math.min(...codeStarts) - box.x - 8) : 40;
         const rows = cleaned.lineNumbersRemoved ? codeRows(highlighted, cleaned.hints, cleaned.firstLine, rgbHex(palette.colors.text), false, gutterWidth, codeStarts.length >= 3 ? 8 : 14)
           : highlighted.map((l) => `<tr><td style="padding:0;white-space:pre;">${l.runs.map((r) => `<span style="color:${rgbHex(r.color ?? palette.colors.text)};">${escapeHtml(r.text)}</span>`).join("")}</td></tr>`).join("");
-        return `<div style="min-height:${Math.round(box.height)}px;background-color:${rgbHex(bg)};color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};overflow-x:auto;">${plain(cleaned.header)}<table style="width:100%;border-collapse:collapse;border:none;color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};"><tbody>${rows}</tbody></table>${plain(suffix)}</div>`;
+        return `<div style="min-height:${Math.round(box.height)}px;background-color:${rgbHex(bg)};color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};overflow:hidden;">${plain(cleaned.header)}<table style="width:100%;border-collapse:collapse;border:none;color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};"><tbody>${rows}</tbody></table>${plain(suffix)}</div>`;
       }
       const removed = component ? panelWords.filter((w) => chromeNoise(w, component)) : [];
       const visible = panelWords.filter((w) => !removed.includes(w));

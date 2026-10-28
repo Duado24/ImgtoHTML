@@ -80,7 +80,7 @@ export function render(
 ): string {
   const bg = rgbHex(background);
   const fg = rgbHex(foreground);
-  const [lineStyle, boxOverflow] = kind === "code" ? [NO_WRAP, "overflow-x:auto;"] : [WRAP, ""];
+  const [lineStyle, boxOverflow] = kind === "code" ? [NO_WRAP, "overflow:hidden;"] : [WRAP, ""];
 
   const lineDivs = lines.map((line) => lineDiv(line, lineStyle, "    ", foreground)).join("\n");
 

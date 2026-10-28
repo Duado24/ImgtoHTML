@@ -84,7 +84,8 @@ export function assignLayoutWords(layout: VisionLayout, words: readonly OcrWord[
   return assigned;
 }
 
-/** Table columns survive conservative Canvas CSS allowlists. Narrow views scroll locally. */
+/** Table columns survive conservative Canvas CSS allowlists. Narrow pages shrink the
+ *  columns and cut off long lines at their panel edge: no scrollbar. */
 export function renderLayout(layout: VisionLayout, words: readonly OcrWord[], width: number, label: string, caption: string | null, paint: (words: OcrWord[], box: Box, component?: LayoutComponent) => string, pixels?: Pixels): string {
   const assigned = assignLayoutWords(layout, words);
   function group(nodes: LayoutComponent[]): string {
@@ -109,7 +110,7 @@ export function renderLayout(layout: VisionLayout, words: readonly OcrWord[], wi
     return `<div id="layout-${c.id}" style="min-width:0;overflow:hidden;${pixels ? `background-color:${rgbHex(dominantColor(pixels, c.box))};` : ""}min-height:${Math.round(c.box.height)}px;">` + (own.length ? paint(own, c.box, c) : "") + group(layout.components.filter((n) => n.parent === c.id)) + '</div>';
   }
   const leftover = assigned.get("\0") ?? [];
-  return `<div role="figure" aria-label="${escapeHtml(label)}" style="max-width:100%;overflow-x:auto;"><div style="width:100%;min-width:${Math.min(width, 640)}px;">` + group(layout.components.filter((c) => c.parent === null)) + (leftover.length ? paint(leftover, { x: 0, y: 0, width, height: 0 }) : "") + '</div>' + (caption ? `<p>${escapeHtml(caption)}</p>` : "") + '</div>';
+  return `<div role="figure" aria-label="${escapeHtml(label)}" style="max-width:100%;overflow:hidden;"><div style="width:100%;">` + group(layout.components.filter((c) => c.parent === null)) + (leftover.length ? paint(leftover, { x: 0, y: 0, width, height: 0 }) : "") + '</div>' + (caption ? `<p>${escapeHtml(caption)}</p>` : "") + '</div>';
 }
 
 /** Share of a line's pixels that must change for it to count as an edge. */

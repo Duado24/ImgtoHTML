@@ -50,10 +50,11 @@ describe("render", () => {
     expect(make("terminal")).not.toContain("overflow-x:auto");
   });
 
-  it("code never wraps and scrolls in its box", () => {
+  it("code never wraps and is cut off at its box edge rather than scrolling", () => {
     const { styles } = linesOf(make("code"));
     expect(styles.every((s) => s.includes("white-space:pre;"))).toBe(true);
-    expect(make("code")).toContain("overflow-x:auto");
+    expect(make("code")).toContain("overflow:hidden;");
+    expect(make("code")).not.toContain("overflow-x:auto");
   });
 
   it("caption outside the text box", () => {

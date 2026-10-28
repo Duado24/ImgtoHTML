@@ -136,15 +136,17 @@ export function codeRows(lines: readonly PaintedLine[], hints: readonly EditorHi
 /** The whole window as a Canvas fragment. */
 export function renderEditorWindow(lines: readonly PaintedLine[], window: EditorWindow, text: string, label: string, caption?: string | null): string {
   const code =
-    `        <div style="overflow-x:auto;padding:4px 0 14px;">\n` +
+    `        <div style="overflow:hidden;padding:4px 0 14px;">\n` +
     `        <table style="border-collapse:collapse;border:none;width:100%;font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.5;color:${text};">\n` +
     `          <tbody>\n${codeRows(lines, window.hints, window.firstLine, text)}\n          </tbody>\n        </table>\n        </div>\n`;
   const editorCell =
     `      <td style="vertical-align:top;padding:0;background-color:${C.editor};">\n${headerHtml(window.header)}${code}      </td>\n`;
+  // Fits any page width with no scrollbar: columns shrink, long lines are cut
+  // off at the panel edge, as in a screenshot.
   return (
     `<div role="figure" aria-label="${escapeHtml(label)}" style="max-width:100%;min-width:0;margin:0;">\n` +
-    `  <div style="width:100%;overflow-x:auto;border:1px solid #333333;background-color:${C.editor};color:${text};">\n` +
-    `  <table style="border-collapse:collapse;width:100%;min-width:${window.sidebar ? 780 : 520}px;table-layout:fixed;border:none;">\n` +
+    `  <div style="width:100%;overflow:hidden;border:1px solid #333333;background-color:${C.editor};color:${text};">\n` +
+    `  <table style="border-collapse:collapse;width:100%;table-layout:fixed;border:none;">\n` +
     `    <tbody>\n      <tr>\n${window.sidebar ? sidebarCell(window.sidebar) : ""}${editorCell}      </tr>\n    </tbody>\n  </table>\n  </div>` +
     (caption ? `\n  <p style="margin:10px 0 0;padding:0;color:#202124;font:14px/1.5 Arial,sans-serif;">${escapeHtml(caption)}</p>` : "") +
     "\n</div>"
