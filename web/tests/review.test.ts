@@ -93,8 +93,17 @@ describe("review actions", () => {
     const after = await poll(app, id);
     expect(recognize.mock.calls.length).toBeGreaterThan(before);
     expect(analyze).toHaveBeenLastCalledWith(expect.anything(), [expect.objectContaining({ id: "r1" })], { hint: "it says world" });
-    const alternatives = after.model.regions[0]!.lines[0]!.spans[1]!.alternatives;
-    expect(alternatives).toEqual([{ source: "vision", text: "world", confidence: null }]);
+    // OCR's unsure "wor1d" differs from "world" only by a lookalike: taken as fixed, and reported.
+    expect(after.model.regions[0]!.lines[0]!.spans[1]!.text).toBe("world");
+    expect(after.review.vision?.corrected).toEqual([{ from: "wor1d", to: "world" }]);
+  });
+  it("keeps a vision reading that changes more than lookalikes as a suggestion", async () => {
+    const analyze = async (_image: unknown, regions: readonly { id: string }[]) => regions.map((r) => ({ regionId: r.id, role: "terminal", text: "hello there" }));
+    const { first } = await setup({ name: "fake", analyze });
+    const span = first.model.regions[0]!.lines[0]!.spans[1]!;
+    expect(span.text).toBe("wor1d");
+    expect(span.alternatives).toEqual([{ source: "vision", text: "there", confidence: null }]);
+    expect(first.review.vision?.corrected).toBeUndefined();
   });
 
   it("refuses bad requests with a message", async () => {

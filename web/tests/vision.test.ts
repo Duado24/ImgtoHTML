@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildModel } from "../src/core/model";
-import { mergeVision } from "../src/core/vision";
+import { lookalikeFixes, mergeVision, onlyLookalikes } from "../src/core/vision";
 import type { OcrWord } from "../src/core/types";
 
 const word = (text: string, x: number, line: number): OcrWord => ({
@@ -41,5 +41,27 @@ describe("mergeVision", () => {
 
   it("ignores readings for unknown regions", () => {
     expect(mergeVision(model(), [{ regionId: "r9", role: "code", text: "x" }])).toEqual(model());
+  });
+});
+
+describe("lookalike corrections", () => {
+  it("accepts swapped lookalike characters and one dropped dot", () => {
+    expect(onlyLookalikes("HIML", "HTML")).toBe(true);
+    expect(onlyLookalikes("packagejson", "package.json")).toBe(true);
+    expect(onlyLookalikes("package,json", "package.json")).toBe(true);
+    expect(onlyLookalikes("“dev”:", '"dev":')).toBe(true);
+  });
+  it("leaves real disagreements for the reviewer", () => {
+    expect(onlyLookalikes("Debug", "1")).toBe(false);
+    expect(onlyLookalikes("cat", "car")).toBe(false);
+    expect(onlyLookalikes("log", "logs")).toBe(false);
+    expect(onlyLookalikes("HTML", "HTML")).toBe(false);
+  });
+  it("only fixes words OCR was unsure of", () => {
+    const merged = mergeVision(model(), [{ regionId: "r1", role: "text", text: "git l0g --oneline\na1b2c3 Initial commit" }]);
+    expect(lookalikeFixes(merged)).toEqual([]); // "log" was read at 95%
+    const unsure = buildModel(300, 40, "diagram", { kind: "leaf", box: { x: 0, y: 0, width: 300, height: 40 }, background: [0, 0, 0], words: [{ ...words[0]!, text: "HIML", confidence: 60 }] }, [{ ...words[0]!, text: "HIML", confidence: 60 }]);
+    const fixes = lookalikeFixes(mergeVision(unsure, [{ regionId: "r1", role: "text", text: "HTML" }]));
+    expect(fixes).toEqual([{ box: expect.any(Object), from: "HIML", to: "HTML" }]);
   });
 });

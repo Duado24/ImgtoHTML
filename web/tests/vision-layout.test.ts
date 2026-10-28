@@ -4,6 +4,7 @@ import { validateLayout, checkLayout, fromNormalized, assignLayoutWords, renderL
 import { convert } from "../src/core/convert";
 import { checkCanvasSafe } from "../src/core/canvas";
 import type { OcrWord } from "../src/core/types";
+import type { VisionLayout } from "../src/core/vision-layout";
 const layout = validateLayout(fixture, 1033, 367)!;
 const word = (text: string, x: number, y: number): OcrWord => ({ text, x, y, width: 60, height: 12, confidence: 99, block: 1, paragraph: 1, line: 1 });
 const words = [word("Explorer", 5, 5), word("package.json", 480, 5), word('"name":', 380, 68), word("/home/alice/file", 15, 65)];
@@ -78,4 +79,36 @@ it("snaps a model column boundary to a strong source separator", () => {
   const refined = refineLayout(approximate, { width: 100, height: 50, data });
   expect(refined.components[0]!.box.width).toBe(32);
   expect(refined.components[1]!.box.x).toBe(32);
+});
+
+describe("stacked strips", () => {
+  // A panel as tall as the VS Code screenshot: tab bar rows 0–23, breadcrumb
+  // 24–46, code from 47 (three shades).
+  const H = 367;
+  const data = new Uint8ClampedArray(100 * H * 4);
+  for (let y = 0; y < H; y++) data.fill(y < 24 ? 40 : y < 47 ? 20 : 30, y * 400, y * 400 + 400);
+  const pixels = { width: 100, height: H, data };
+  // Squashed the way qwen3-vl drew that tab bar and breadcrumb.
+  const squashed = validateLayout({ application: "ide", components: [
+    { id: "editor", type: "editor", parent: null, box: { x: 0, y: 0, width: 100, height: H } },
+    { id: "tabs", type: "tabs", parent: "editor", box: { x: 0, y: 0, width: 100, height: 11 } },
+    { id: "crumbs", type: "breadcrumbs", parent: "editor", box: { x: 0, y: 11, width: 100, height: 9 } },
+    { id: "code", type: "code", parent: "editor", box: { x: 0, y: 20, width: 100, height: H - 20 } },
+  ] }, 100, H)!;
+  const box = (l: VisionLayout, id: string) => l.components.find((c) => c.id === id)!.box;
+
+  it("moves every boundary to its own pixel edge, in order", () => {
+    const refined = refineLayout(squashed, pixels);
+    expect(box(refined, "tabs")).toMatchObject({ y: 0, height: 24 });
+    expect(box(refined, "crumbs")).toMatchObject({ y: 24, height: 23 });
+    expect(box(refined, "code")).toMatchObject({ y: 47, height: H - 47 });
+  });
+  it("never puts a boundary through a word", () => {
+    const word: OcrWord = { text: "web", x: 10, y: 40, width: 20, height: 12, confidence: 99, block: 1, paragraph: 1, line: 1 };
+    expect(box(refineLayout(squashed, pixels, [word]), "code").y).not.toBe(47);
+  });
+  it("leaves the model's geometry where the pixels show no edges", () => {
+    const flat = { width: 100, height: H, data: new Uint8ClampedArray(100 * H * 4).fill(30) };
+    expect(refineLayout(squashed, flat)).toEqual(squashed);
+  });
 });

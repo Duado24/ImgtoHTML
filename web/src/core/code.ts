@@ -262,6 +262,54 @@ function colorBrackets(lines: Run[][]): Run[][] {
   );
 }
 
+/** Letters needed before a measured color replaces the theme's. */
+const MIN_LETTERS = 6;
+/** Straight quotes in place of curly ones, one for one, so offsets still match. */
+const straight = (text: string) => text.replace(/[“”„‟″]/g, '"').replace(/[‘’‚‛′]/g, "'");
+
+/** The theme with each syntax color replaced by the screenshot's own, where
+ *  the screenshot shows enough letters of that kind. Each OCR row is
+ *  highlighted on its own to learn which kind every letter is (a JSON key,
+ *  a string…); `letterColor` is that letter's measured ink color. Works for
+ *  any editor theme: no colors are assumed, only the kinds of token. */
+export function measuredTheme(
+  rows: readonly (readonly { text: string }[])[],
+  language: string | null,
+  base: Theme,
+  letterColor: (word: { text: string }, index: number) => RGB | undefined,
+): { theme: Theme; measured: Slot[] } {
+  // Highlight with a probe theme whose colors encode their slot.
+  const slots = Object.keys(base.colors) as Slot[];
+  const probe: Theme = { ...base, colors: Object.fromEntries(slots.map((s, i) => [s, [i + 1, 0, 0]])) as unknown as Theme["colors"] };
+  const samples = new Map<Slot, RGB[]>();
+  for (const row of rows) {
+    const line = highlightCode(straight(row.map((w) => w.text).join(" ")), language, probe)[0];
+    if (!line) continue;
+    const kinds: Slot[] = line.runs.flatMap((run) => {
+      const slot = run.color && run.color[1] === 0 && run.color[2] === 0 ? slots[run.color[0] - 1] : undefined;
+      // Brackets get pair colors, not a slot: leave them out.
+      return [...run.text].map(() => (run.color ? slot : "text") as Slot);
+    });
+    let offset = 0;
+    for (const word of row) {
+      for (let i = 0; i < word.text.length; i++) {
+        const kind = kinds[offset + i];
+        const color = letterColor(word, i);
+        if (kind && color && /\S/.test(word.text[i]!)) samples.set(kind, [...(samples.get(kind) ?? []), color]);
+      }
+      offset += word.text.length + 1;
+    }
+  }
+  const median = (ns: number[]) => [...ns].sort((a, b) => a - b)[ns.length >> 1]!;
+  const measured = slots.filter((s) => (samples.get(s)?.length ?? 0) >= MIN_LETTERS);
+  const colors = { ...base.colors };
+  for (const s of measured) {
+    const cs = samples.get(s)!;
+    colors[s] = [median(cs.map((c) => c[0])), median(cs.map((c) => c[1])), median(cs.map((c) => c[2]))];
+  }
+  return { theme: { ...base, name: `${base.name}+measured`, colors }, measured };
+}
+
 /** Highlight `code` and return one painted line per line, in the theme's colors. */
 export function highlightCode(code: string, language: string | null, theme: Theme): PaintedLine[] {
   const html = language ? hljs.highlight(code, { language, ignoreIllegals: true }).value : code.replace(/&/g, "&amp;").replace(/</g, "&lt;");

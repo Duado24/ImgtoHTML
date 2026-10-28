@@ -11,6 +11,7 @@ import type { Diagram } from "../src/core/diagram";
 import type { ReviewState } from "../src/core/model";
 import type { Box, OcrWord } from "../src/core/types";
 import { cropPixels } from "../src/core/preprocess";
+import { lookalikeFixes } from "../src/core/vision";
 import { NullVisionModel, type VisionModel } from "./vision";
 import type { Job, JobResult } from "../src/shared/api";
 import type { DecodedImage } from "./image";
@@ -99,24 +100,40 @@ export class Jobs {
   /** Convert again from the session's words, readings and decisions. */
   private finalize(session: Session): JobResult {
     const { input, image } = session;
-    let result: ConvertResult = convert({ ...input, pixels: image.pixels, animated: image.animated, words: session.words, layout: session.layout?.layout });
-    // convert() only knows no layout reached it; say why.
-    const status = { ...result.review.layout_status, attempts: session.layout?.attempts ?? [] };
-    if (!session.layout?.layout && status.reason === "no layout was detected") {
-      const problem = session.layout?.attempts.at(-1)?.problem;
-      status.reason = session.layoutNote ?? (problem ? `the model's layout was rejected: ${problem}` : status.reason);
-    }
-    const review = { ...result.review, layout_status: status, server_build: BUILD_ID };
-    result = { ...result, review, reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) } };
-    if (this.usesVision) {
-      const readings = session.readings.flatMap((reading) => {
-        const best = result.model.regions.reduce<{ id: string; area: number } | null>((top, r) => {
-          const area = overlap(r.box, reading.box);
-          return area > (top?.area ?? 0) ? { id: r.id, area } : top;
-        }, null);
-        return best ? [{ regionId: best.id, role: reading.role, text: reading.text }] : [];
+    const build = (words: OcrWord[]) => {
+      let result: ConvertResult = convert({ ...input, pixels: image.pixels, animated: image.animated, words, layout: session.layout?.layout });
+      // convert() only knows no layout reached it; say why.
+      const status = { ...result.review.layout_status, attempts: session.layout?.attempts ?? [] };
+      if (!session.layout?.layout && status.reason === "no layout was detected") {
+        const problem = session.layout?.attempts.at(-1)?.problem;
+        status.reason = session.layoutNote ?? (problem ? `the model's layout was rejected: ${problem}` : status.reason);
+      }
+      const review = { ...result.review, layout_status: status, server_build: BUILD_ID };
+      result = { ...result, review, reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) } };
+      if (this.usesVision) {
+        const readings = session.readings.flatMap((reading) => {
+          const best = result.model.regions.reduce<{ id: string; area: number } | null>((top, r) => {
+            const area = overlap(r.box, reading.box);
+            return area > (top?.area ?? 0) ? { id: r.id, area } : top;
+          }, null);
+          return best ? [{ regionId: best.id, role: reading.role, text: reading.text }] : [];
+        });
+        result = addVision(result, this.vision.name, readings, session.visionError);
+      }
+      return result;
+    };
+    let result = build(session.words);
+    // Unsure words the vision model read with only lookalike characters
+    // changed are taken as fixed: convert again with its reading.
+    const fixes = this.usesVision ? lookalikeFixes(result.model) : [];
+    if (fixes.length) {
+      const corrected = session.words.map((w) => {
+        const fix = fixes.find((f) => sameBox(w, f.box));
+        return fix ? { ...w, text: fix.to, confidence: 100 } : w;
       });
-      result = addVision(result, this.vision.name, readings, session.visionError);
+      result = build(corrected);
+      const review = { ...result.review, vision: { ...result.review.vision!, corrected: fixes.map(({ from, to }) => ({ from, to })) } };
+      result = { ...result, review, reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) } };
     }
     if (session.diagram && !input.transcript?.trim()) result = addDiagram(result, session.diagram);
     result = applyDecisions(result, session.decisions);

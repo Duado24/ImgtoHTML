@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanCode, detectLanguage, highlightCode } from "../src/core/code";
+import { cleanCode, detectLanguage, highlightCode, measuredTheme } from "../src/core/code";
 import { lineText } from "../src/core/paint";
 import { CODE_THEME } from "../src/core/theme";
 
@@ -83,5 +83,24 @@ describe("highlightCode", () => {
 
   it("escapes nothing twice when there is no language", () => {
     expect(highlightCode("a < b && c", null, CODE_THEME).map(lineText)).toEqual(["a < b && c"]);
+  });
+});
+
+describe("measuredTheme", () => {
+  const green: [number, number, number] = [92, 215, 146], blue: [number, number, number] = [66, 155, 236];
+  const rows = [[{ text: '"name":' }, { text: '"imgtohtml-web",' }], [{ text: '"version":' }, { text: '"2.0.0",' }]];
+  // Keys painted green, values blue: some editor theme other than Dark+.
+  const ink = (w: { text: string }) => (w.text.endsWith(":") ? green : blue);
+
+  it("takes each kind of token's color from the screenshot", () => {
+    const { theme, measured } = measuredTheme(rows, "json", CODE_THEME, (w) => ink(w));
+    expect(measured).toEqual(expect.arrayContaining(["sky", "red"]));
+    expect(theme.colors.sky).toEqual(green);
+    expect(theme.colors.red).toEqual(blue);
+    expect(theme.colors.magenta).toEqual(CODE_THEME.colors.magenta);
+  });
+  it("keeps the theme's color without enough letters to measure", () => {
+    const { measured } = measuredTheme([[{ text: '"a":' }]], "json", CODE_THEME, (w) => ink(w));
+    expect(measured).not.toContain("sky");
   });
 });

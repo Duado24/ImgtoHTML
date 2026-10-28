@@ -1,7 +1,8 @@
-/** Add a vision model's reading to the screenshot model. The vision model
- *  never replaces OCR text: where the two disagree, its reading becomes an
- *  alternative on the span and the span is flagged for review. It does
- *  name each region (terminal, code, sidebar…). */
+/** Add a vision model's reading to the screenshot model. Where the two
+ *  disagree, its reading becomes an alternative on the span and the span is
+ *  flagged for review. The one exception is lookalikeFixes(): an unsure OCR
+ *  word that differs only by lookalike characters is taken as fixed, and
+ *  reported. It does name each region (terminal, code, sidebar…). */
 
 import type { ModelRegion, ScreenshotModel, Span } from "./model";
 
@@ -67,6 +68,35 @@ function mergeRegion(region: ModelRegion, reading: RegionReading): ModelRegion {
   });
 
   return { ...region, role: reading.role || region.role, lines, flags, review: flags.length ? "pending" : region.review };
+}
+
+/** Characters OCR commonly swaps in small screen text, both ways. */
+const LOOKALIKES = ["IT", "Il", "I1", "l1", "I|", "l|", "O0", "o0", "S5", "B8", "Z2", ",.", ";:", '"“', '"”', "'‘", "'’"];
+const swappable = (a: string, b: string) => a === b || LOOKALIKES.some((p) => p === a + b || p === b + a);
+/** OCR confidence (0–1) above which its reading is kept even against the vision model. */
+const TRUST_OCR = 0.95;
+
+/** True when `seen` is `read` with only lookalike characters swapped, plus at
+ *  most one "." or "," that OCR dropped ("packagejson" → "package.json"). */
+export function onlyLookalikes(read: string, seen: string): boolean {
+  const a = [...read], b = [...seen];
+  if (read === seen || b.length - a.length < 0 || b.length - a.length > 1) return false;
+  const walk = (i: number, j: number, inserted: boolean): boolean => {
+    if (i === a.length && j === b.length) return true;
+    if (j < b.length && !inserted && /[.,]/.test(b[j]!) && walk(i, j + 1, true)) return true;
+    return i < a.length && j < b.length && swappable(a[i]!, b[j]!) && walk(i + 1, j + 1, inserted);
+  };
+  return walk(0, 0, false);
+}
+
+/** Words where the vision model's reading differs from OCR's only by
+ *  lookalike characters and OCR wasn't sure: those are taken as fixed. Any
+ *  other disagreement stays a suggestion for the reviewer. */
+export function lookalikeFixes(model: ScreenshotModel): { box: Span["box"]; from: string; to: string }[] {
+  return model.regions.flatMap((r) => r.lines.flatMap((l) => l.spans)).flatMap((span) => {
+    const seen = span.alternatives.find((a) => a.source === "vision")?.text;
+    return seen && (span.confidence ?? 0) < TRUST_OCR && onlyLookalikes(span.text, seen) ? [{ box: span.box, from: span.text, to: seen }] : [];
+  });
 }
 
 export function mergeVision(model: ScreenshotModel, readings: readonly RegionReading[]): ScreenshotModel {

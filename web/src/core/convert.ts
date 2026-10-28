@@ -1,3 +1,4 @@
+import { measureFont, chromeNoise, splitItems, itemBox, panelBackground, MONO_FONT, UI_FONT } from "./panel-features";
 import { renderLayout, checkLayout, refineLayout, type LayoutAttempt, type VisionLayout } from "./vision-layout";
 /** Screenshot → Canvas HTML draft. Pure: takes decoded pixels and OCR
  *  words, returns the files to offer for download. The browser parts
@@ -7,16 +8,16 @@ import { checkCanvasSafe, type CanvasIssue } from "./canvas";
 import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
 import { buildModel, flagsByRegion, type ReviewState, type ScreenshotModel } from "./model";
-import { cleanCode, detectLanguage, highlightCode, repairJsonBraces, type CodeCleanup } from "./code";
+import { cleanCode, detectLanguage, highlightCode, measuredTheme, repairJsonBraces, type CodeCleanup } from "./code";
 import { renderDiagram, unconfirmedLabels, type Diagram } from "./diagram";
-import { renderEditorWindow } from "./editor-window";
+import { codeRows, renderEditorWindow } from "./editor-window";
 import { colorRoles } from "./terminal";
 import { mergeVision, type RegionReading } from "./vision";
-import { applyTheme, themeFor } from "./theme";
+import { CODE_THEME, applyTheme, themeFor } from "./theme";
 import { colorsUsed, mainColor, measureLooks, paintLines, plainLines, type PaintedLine, type WordLook } from "./paint";
 import { learnedUsernames, sanitizeLines, sanitizeText } from "./privacy";
 import { segment, type Leaf, type Region } from "./regions";
-import { render, renderLayoutPanel, renderPanels, type PaintedLeaf } from "./render";
+import { escapeHtml, render, renderLayoutPanel, renderPanels, type PaintedLeaf } from "./render";
 import { isIconNoise, type Kind, type OcrWord, type Pixels } from "./types";
 import { middle } from "./pymath";
 
@@ -80,11 +81,15 @@ export interface Review {
   /** Regions with flagged text, least confident first (details in the model file). */
   regions_to_review: { region: string; confidence: number | null; flags: number }[];
   /** Code screenshots: detected language and the clean-up applied to the OCR text. */
-  code: { editor_window: boolean; language: string | null; line_numbers_removed: boolean; lines_outside_code: number; panels_left_out: number; quotes_straightened: number; braces_repaired: number; indent_unit: number | null; lines_snapped: number } | null;
+  /** `colors_measured`: syntax colors taken from the screenshot; the rest are VS Code Dark+. */
+  code_panels?: { component: string; cleanup: NonNullable<Review["code"]>; colors_measured: string[] }[];
+  panel_features?: { component: string; font: ReturnType<typeof measureFont>; icons_removed: string[] }[];
+  code: { editor_window: boolean; language: string | null; line_numbers_removed: boolean; lines_outside_code: number; panels_left_out: number; quotes_straightened: number; braces_repaired: number; duplicate_quotes_removed?: number; indent_unit: number | null; lines_snapped: number } | null;
   /** Diagrams described by the vision model: size, and labels OCR didn't confirm. */
   diagram: { parts: number; connections: number; unconfirmed_labels: string[] } | null;
   /** The vision model that also read the screenshot, or null when none ran. */
-  vision: { model: string; regions_read: number; error?: string } | null;
+  /** `corrected`: OCR words replaced by the vision model's reading (lookalike characters only). */
+  vision: { model: string; regions_read: number; error?: string; corrected?: { from: string; to: string }[] } | null;
   privacy: {
     home_path_masking: boolean;
     learned_email_identity_masking: boolean;
@@ -183,7 +188,7 @@ const LAID_OUT: readonly string[] = ["ide", "code-editor", "website", "desktop"]
 export function convert(input: ConvertInput): ConvertResult {
   const { pixels, animated } = input;
   const checked = input.layout ? checkLayout(input.layout, pixels.width, pixels.height) : null;
-  const detected = checked?.layout ? refineLayout(checked.layout, pixels) : null;
+  const detected = checked?.layout ? refineLayout(checked.layout, pixels, input.words) : null;
   const skipLayout =
     input.kind === "diagram" ? "diagrams are described, not laid out"
     : input.transcript?.trim() ? "a corrected transcript was given"
@@ -247,18 +252,86 @@ export function convert(input: ConvertInput): ConvertResult {
   let uncertain: UncertainWord[];
   let panels = 1;
   let code: Review["code"] = null;
+  const codePanels: NonNullable<Review["code_panels"]> = [];
+  const panelFeatures: NonNullable<Review["panel_features"]> = [];
 
   if (layout) {
     renderer = "layout";
     textLines = ocr.lines;
     uncertain = ocr.uncertain;
     painted = [];
-    html = renderLayout(layout, words, pixels.width, label, caption, (panelWords, box) => {
-      const bg = colorsFromWords(pixels, panelWords).background;
-      const panel = paintLeaf(pixels, { kind: "leaf", box, background: bg, words: panelWords }, looks);
-      painted.push(...panel.lines);
-      return renderLayoutPanel(panel, bg, fixContrast(foreground, bg), box.height);
-    });
+    html = renderLayout(layout, words, pixels.width, label, caption, (panelWords, box, component) => {
+      const bg = panelBackground(pixels, box);
+      const fg = fixContrast(foreground, bg);
+      if (component?.type === "code") {
+        const raw = layoutWords(panelWords).lines;
+        const cleaned = cleanCode(raw);
+        const language = detectLanguage(cleaned.lines.join("\n"));
+        const repaired = language === "json" ? repairJsonBraces(cleaned.lines) : { lines: cleaned.lines, repaired: 0 };
+        // Duplicate opening quotes before a nonempty JSON value are a localized OCR artifact.
+        const normalized = language === "json" ? repaired.lines.map((l) => l.replace(/^(\s*"[^"]+"\s*:\s*)"{2}(?=[\p{L}\p{N}_./])/u, '$1"')) : repaired.lines;
+        // The screenshot's own syntax colors where it shows enough of each kind; Dark+ otherwise.
+        const ocrRows = layoutWords(panelWords).rows.map((r) => r.words.map((w) => w.word));
+        const { theme: own, measured } = measuredTheme(ocrRows, language, CODE_THEME, (w, i) => looks.get(w as OcrWord)?.letters[i]);
+        const palette = { ...own, background: bg, colors: Object.fromEntries(Object.entries(own.colors).map(([k, color]) => [k, fixContrast(color, bg)])) as typeof CODE_THEME.colors };
+        const highlighted = highlightCode(normalized.join("\n"), language, palette).map((line) => ({ ...line, runs: line.runs.map((run) => ({ ...run, color: run.color ? fixContrast(run.color, bg) : undefined })) }));
+        painted.push(...highlighted);
+        const details: NonNullable<Review["code"]> = { editor_window: true, language, line_numbers_removed: cleaned.lineNumbersRemoved, lines_outside_code: cleaned.linesOutsideCode, panels_left_out: 0, quotes_straightened: cleaned.quotesStraightened, braces_repaired: repaired.repaired, duplicate_quotes_removed: normalized.filter((l, i) => l !== repaired.lines[i]).length, indent_unit: cleaned.indentUnit, lines_snapped: cleaned.linesSnapped };
+        codePanels.push({ component: component.id, cleanup: details, colors_measured: measured });
+        code ??= details;
+        const plain = (lines: string[]) => lines.map((l) => `<div style="white-space:pre;">${escapeHtml(l)}</div>`).join("");
+        // Keep observed text outside the gutter, including footer labels and code hints.
+        const lastNumber = cleaned.lineNumbersRemoved ? raw.reduce((last, l, i) => /^\s*\d{1,4}(\s+|$)/.test(l) ? i : last, -1) : raw.length - 1;
+        const suffix = raw.slice(lastNumber + 1);
+        const codeStarts = layoutWords(panelWords).rows.flatMap((row) => {
+          const ordered = row.words.map((w) => w.word).sort((a, b) => a.x - b.x);
+          return ordered[0] && /^\d{1,4}$/.test(ordered[0].text) && ordered[1] ? [ordered[1].x] : [];
+        });
+        const gutterWidth = codeStarts.length >= 3 ? Math.max(20, Math.min(...codeStarts) - box.x - 8) : 40;
+        const rows = cleaned.lineNumbersRemoved ? codeRows(highlighted, cleaned.hints, cleaned.firstLine, rgbHex(palette.colors.text), false, gutterWidth, codeStarts.length >= 3 ? 8 : 14)
+          : highlighted.map((l) => `<tr><td style="padding:0;white-space:pre;">${l.runs.map((r) => `<span style="color:${rgbHex(r.color ?? palette.colors.text)};">${escapeHtml(r.text)}</span>`).join("")}</td></tr>`).join("");
+        return `<div style="min-height:${Math.round(box.height)}px;background-color:${rgbHex(bg)};color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};overflow-x:auto;">${plain(cleaned.header)}<table style="width:100%;border-collapse:collapse;border:none;color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};"><tbody>${rows}</tbody></table>${plain(suffix)}</div>`;
+      }
+      const removed = component ? panelWords.filter((w) => chromeNoise(w, component)) : [];
+      const visible = panelWords.filter((w) => !removed.includes(w));
+      const font = measureFont(visible, component?.type === "terminal" ? MONO_FONT : UI_FONT);
+      if (component) panelFeatures.push({ component: component.id, font, icons_removed: removed.map((w) => w.text) });
+      const draw = (ws: OcrWord[], bounds: typeof box) => {
+        const background = bounds.height > 0 ? panelBackground(pixels, bounds) : bg;
+        const panel = paintLeaf(pixels, { kind: "leaf", box: bounds, background, words: ws }, looks);
+        painted.push(...panel.lines);
+        return renderLayoutPanel(panel, background, fixContrast(fg, background), bounds.height, font.family);
+      };
+      if (component && ["tabs", "toolbar", "menu"].includes(component.type)) {
+        const rows = layoutWords(visible).rows.filter((r) => r.words.length);
+        return rows.map((row) => {
+          const items = splitItems(row.words.map((w) => w.word), pixels);
+          const height = rows.length > 1 ? Math.min(box.height / rows.length, 20) : box.height;
+          return '<table role="presentation" style="width:100%;table-layout:fixed;border-collapse:collapse;border:none;"><tbody><tr>' + items.map((item, i) => {
+            const bounds = itemBox(item, { ...box, height });
+            const next = items[i + 1];
+            const right = next ? Math.min(...next.map((w) => w.x)) - 4 : box.x + box.width;
+            const width = Math.max(1, right - (i === 0 ? box.x : bounds.x));
+            return `<td style="width:${100 * width / box.width}%;vertical-align:top;padding:0;border:none;">${draw(item, bounds)}</td>`;
+          }).join("") + '</tr></tbody></table>';
+        }).join("");
+      }
+      // UI indentation uses pixel padding rather than spaces in a proportional font.
+      if (font.family === UI_FONT) {
+        let previousY = box.y;
+        let first = true;
+        return `<div style="min-height:${Math.round(box.height)}px;background-color:${rgbHex(bg)};">` + layoutWords(visible).rows.filter((row) => row.words.length).map((row) => {
+          const ws = row.words.map((w) => w.word);
+          const x = Math.min(...ws.map((w) => w.x));
+          const y = Math.min(...ws.map((w) => w.y));
+          const gap = Math.max(0, y - previousY - (first ? 0 : 18.85));
+          previousY = y;
+          first = false;
+          return `<div style="padding-top:${gap}px;padding-left:${Math.max(0, Math.round(x - box.x))}px;">${draw(ws, { ...box, x, width: box.width - (x - box.x), height: 0 })}</div>`;
+        }).join("") + '</div>';
+      }
+      return draw(visible, box);
+    }, pixels);
     panels = layout.components.length;
   } else if (kind === "code" && theme) {
     // Code is re-highlighted by language rather than painted from pixels.
@@ -367,6 +440,7 @@ export function convert(input: ConvertInput): ConvertResult {
     regions_to_review: regionsToReview(model),
     vision: null,
     code,
+    ...(layout ? { code_panels: codePanels, panel_features: panelFeatures } : {}),
     diagram: null,
     privacy: {
       home_path_masking: true,

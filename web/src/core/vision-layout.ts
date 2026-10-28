@@ -1,3 +1,4 @@
+import { dominantColor, rgbHex } from "./colors";
 import { escapeHtml } from "./render";
 import type { Box, OcrWord, Pixels } from "./types";
 
@@ -84,7 +85,7 @@ export function assignLayoutWords(layout: VisionLayout, words: readonly OcrWord[
 }
 
 /** Table columns survive conservative Canvas CSS allowlists. Narrow views scroll locally. */
-export function renderLayout(layout: VisionLayout, words: readonly OcrWord[], width: number, label: string, caption: string | null, paint: (words: OcrWord[], box: Box) => string): string {
+export function renderLayout(layout: VisionLayout, words: readonly OcrWord[], width: number, label: string, caption: string | null, paint: (words: OcrWord[], box: Box, component?: LayoutComponent) => string, pixels?: Pixels): string {
   const assigned = assignLayoutWords(layout, words);
   function group(nodes: LayoutComponent[]): string {
     if (!nodes.length) return "";
@@ -105,40 +106,116 @@ export function renderLayout(layout: VisionLayout, words: readonly OcrWord[], wi
   }
   function node(c: LayoutComponent): string {
     const own = assigned.get(c.id) ?? [];
-    return `<div id="layout-${c.id}" style="min-width:0;overflow:hidden;min-height:${Math.round(c.box.height)}px;">` + (own.length ? paint(own, c.box) : "") + group(layout.components.filter((n) => n.parent === c.id)) + '</div>';
+    return `<div id="layout-${c.id}" style="min-width:0;overflow:hidden;${pixels ? `background-color:${rgbHex(dominantColor(pixels, c.box))};` : ""}min-height:${Math.round(c.box.height)}px;">` + (own.length ? paint(own, c.box, c) : "") + group(layout.components.filter((n) => n.parent === c.id)) + '</div>';
   }
   const leftover = assigned.get("\0") ?? [];
   return `<div role="figure" aria-label="${escapeHtml(label)}" style="max-width:100%;overflow-x:auto;"><div style="width:100%;min-width:${Math.min(width, 640)}px;">` + group(layout.components.filter((c) => c.parent === null)) + (leftover.length ? paint(leftover, { x: 0, y: 0, width, height: 0 }) : "") + '</div>' + (caption ? `<p>${escapeHtml(caption)}</p>` : "") + '</div>';
 }
 
-/** Snap approximate column boundaries to a strong full-height pixel edge.
- * Never infer text, and leave geometry alone when no reliable separator exists. */
-export function refineLayout(layout: VisionLayout, pixels: Pixels): VisionLayout {
-  let result = structuredClone(layout);
-  const roots = layout.components.filter((c) => c.parent === null).sort((a, b) => a.box.x - b.box.x);
-  for (let i = 1; i < roots.length; i++) {
-    const left = result.components.find((c) => c.id === roots[i - 1]!.id)!;
-    const right = result.components.find((c) => c.id === roots[i]!.id)!;
-    const boundary = right.box.x;
-    if (Math.abs(left.box.x + left.box.width - boundary) > 3 || Math.abs(left.box.y - right.box.y) > 3) continue;
-    const y0 = Math.ceil(Math.max(left.box.y, right.box.y));
-    const y1 = Math.floor(Math.min(left.box.y + left.box.height, right.box.y + right.box.height));
-    if (y1 - y0 < pixels.height * 0.7) continue;
-    let best = boundary, bestScore = 0.8;
-    const radius = Math.round(pixels.width * 0.08);
-    for (let x = Math.max(1, Math.round(boundary) - radius); x < Math.min(pixels.width, boundary + radius); x++) {
-      let hits = 0;
-      for (let y = y0; y < y1; y++) {
-        const offset = (y * pixels.width + x) * 4;
-        const delta = Math.abs(pixels.data[offset]! - pixels.data[offset - 4]!) + Math.abs(pixels.data[offset + 1]! - pixels.data[offset - 3]!) + Math.abs(pixels.data[offset + 2]! - pixels.data[offset - 2]!);
-        if (delta > 12) hits++;
-      }
-      const score = hits / (y1 - y0) - Math.abs(x - boundary) / pixels.width * 0.02;
-      if (score > bestScore) { best = x; bestScore = score; }
-    }
-    if (best === boundary) continue;
-    const mapX = (x: number) => x <= boundary ? x * best / boundary : best + (x - boundary) * (pixels.width - best) / (pixels.width - boundary);
-    result = { ...result, components: result.components.map((c) => ({ ...c, box: { ...c.box, x: mapX(c.box.x), width: mapX(c.box.x + c.box.width) - mapX(c.box.x) } })) };
+/** Share of a line's pixels that must change for it to count as an edge. */
+const EDGE = 0.75;
+/** Closest two boundaries in a stack may come (px). */
+const MIN_STRIP = 6;
+/** Cost of leaving a boundary where the pixels show no edge. */
+const NO_EDGE = 0.5;
+
+type Axis = "x" | "y";
+const span = (b: Box, axis: Axis) => (axis === "x" ? [b.x, b.x + b.width] : [b.y, b.y + b.height]) as [number, number];
+const across = (axis: Axis): Axis => (axis === "x" ? "y" : "x");
+
+/** Siblings laid out one after another along `axis`, sharing most of the other axis. */
+function stackAxis(nodes: readonly LayoutComponent[]): Axis | null {
+  if (nodes.length < 2) return null;
+  for (const axis of ["y", "x"] as const) {
+    const sorted = [...nodes].sort((a, b) => span(a.box, axis)[0] - span(b.box, axis)[0]);
+    const stacked = sorted.every((c, i) => {
+      if (i === 0) return true;
+      const p = sorted[i - 1]!, [a0, a1] = span(p.box, across(axis)), [b0, b1] = span(c.box, across(axis));
+      return span(c.box, axis)[0] >= span(p.box, axis)[1] - 3 && Math.min(a1, b1) - Math.max(a0, b0) >= 0.5 * Math.min(a1 - a0, b1 - b0);
+    });
+    if (stacked) return axis;
   }
-  return validateLayout(result, pixels.width, pixels.height) ?? layout;
+  return null;
+}
+
+/** For each line across `axis` from `from` to `to`: the share of its pixels
+ *  within [lo, hi) that differ from the line before. */
+function edgeProfile(pixels: Pixels, axis: Axis, from: number, to: number, lo: number, hi: number): Map<number, number> {
+  const profile = new Map<number, number>();
+  const at = (u: number, v: number) => (axis === "y" ? v * pixels.width + u : u * pixels.width + v) * 4;
+  const back = axis === "y" ? pixels.width * 4 : 4;
+  for (let v = Math.max(1, from); v < to; v++) {
+    let hits = 0;
+    for (let u = lo; u < hi; u++) {
+      const o = at(u, v);
+      if (Math.abs(pixels.data[o]! - pixels.data[o - back]!) + Math.abs(pixels.data[o + 1]! - pixels.data[o + 1 - back]!) + Math.abs(pixels.data[o + 2]! - pixels.data[o + 2 - back]!) > 12) hits++;
+    }
+    profile.set(v, hits / Math.max(1, hi - lo));
+  }
+  return profile;
+}
+
+/** Vision models place boxes roughly: thin strips (tab bars, breadcrumbs,
+ *  toolbars) often come out squashed or shifted. Move each boundary between
+ *  stacked siblings, columns or rows alike, to a nearby strong pixel edge that
+ *  doesn't cut through an OCR word, keeping the boundaries in order. Contents
+ *  of a moved component are stretched with it. Geometry stays as the model
+ *  gave it where no such edge exists. Never infers text. */
+export function refineLayout(layout: VisionLayout, pixels: Pixels, words: readonly OcrWord[] = []): VisionLayout {
+  let components = structuredClone(layout.components);
+  const image: Box = { x: 0, y: 0, width: pixels.width, height: pixels.height };
+  const parents: (string | null)[] = [null];
+  for (let p = 0; p < parents.length; p++) {
+    const parentId = parents[p]!;
+    const nodes = components.filter((c) => c.parent === parentId);
+    parents.push(...nodes.map((c) => c.id));
+    const axis = stackAxis(nodes);
+    if (!axis) continue;
+    const sorted = [...nodes].sort((a, b) => span(a.box, axis)[0] - span(b.box, axis)[0]);
+    const [start, end] = span(components.find((c) => c.id === parentId)?.box ?? image, axis);
+    const lo = Math.round(Math.min(...sorted.map((c) => span(c.box, across(axis))[0])));
+    const hi = Math.round(Math.max(...sorted.map((c) => span(c.box, across(axis))[1])));
+    const radius = Math.max(8, (end - start) * 0.1);
+    const profile = edgeProfile(pixels, axis, Math.ceil(start), Math.floor(end), lo, hi);
+    const inside = words.filter((w) => { const m = span(w, across(axis)); return (m[0] + m[1]) / 2 >= lo && (m[0] + m[1]) / 2 < hi; });
+    const cutsText = (v: number) => inside.some((w) => { const [a, b] = span(w, axis); return v > a + 2 && v < b - 2; });
+
+    // Each boundary keeps its place or moves to an edge: moving costs more with
+    // distance and less with edge strength; keeping it where the pixels show
+    // no edge costs NO_EDGE. Pick the cheapest set that stays in order.
+    const boundaries = sorted.slice(1).map((c, i) => (span(sorted[i]!.box, axis)[1] + span(c.box, axis)[0]) / 2);
+    const options = boundaries.map((b) => [{ at: b, cost: (profile.get(Math.round(b)) ?? 0) >= EDGE ? 0 : NO_EDGE }, ...[...profile]
+      .filter(([v, share]) => share >= EDGE && Math.abs(v - b) <= radius && !cutsText(v))
+      .map(([v, share]) => ({ at: v, cost: Math.abs(v - b) / radius - share }))]);
+    let best: { cost: number; path: number[] }[] = options[0]!.map((o) => ({ cost: o.at >= start + MIN_STRIP ? o.cost : Infinity, path: [o.at] }));
+    for (const row of options.slice(1)) {
+      best = row.map((o) => best.reduce((top, prev) => {
+        const cost = o.at >= prev.path.at(-1)! + MIN_STRIP ? prev.cost + o.cost : Infinity;
+        return cost < top.cost ? { cost, path: [...prev.path, o.at] } : top;
+      }, { cost: Infinity, path: [] as number[] }));
+    }
+    const chosen = best.filter((b) => b.path.at(-1)! <= end - MIN_STRIP).sort((a, b) => a.cost - b.cost)[0];
+    if (!chosen || !Number.isFinite(chosen.cost) || chosen.path.every((v, i) => v === boundaries[i])) continue;
+
+    // Piecewise-linear map along the axis: old boundaries onto the new ones.
+    const from = [start, ...boundaries, end], to = [start, ...chosen.path, end];
+    const map = (v: number) => {
+      const next = from.findIndex((f, k) => k > 0 && v <= f);
+      const i = next < 0 ? from.length - 2 : next - 1;
+      const [f0, f1, t0, t1] = [from[i]!, from[i + 1]!, to[i]!, to[i + 1]!];
+      return f1 === f0 ? t0 : t0 + (v - f0) * (t1 - t0) / (f1 - f0);
+    };
+    const moved = new Set(sorted.map((c) => c.id));
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const c of components) if (c.parent !== null && moved.has(c.parent) && !moved.has(c.id)) { moved.add(c.id); grew = true; }
+    }
+    components = components.map((c) => {
+      if (!moved.has(c.id)) return c;
+      const [a, b] = span(c.box, axis);
+      const [na, nb] = [map(a), map(b)];
+      return { ...c, box: axis === "x" ? { ...c.box, x: na, width: nb - na } : { ...c.box, y: na, height: nb - na } };
+    });
+  }
+  return validateLayout({ ...layout, components }, pixels.width, pixels.height) ?? layout;
 }

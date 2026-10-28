@@ -158,7 +158,10 @@ terminal panes and content containers. The model answers on Qwen3-VL's native
 0–1000 grid, which is scaled to image pixels. Invalid IDs, cycles, missing
 parents, out-of-bounds boxes and overlapping siblings are rejected. One bounded
 model retry, told the first problem found, requests a corrected hierarchy.
-Strong full-height pixel separators refine approximate column boundaries.
+Boundaries between stacked siblings (columns or rows: sidebar/editor, tab bar/
+breadcrumb/code) move to the nearest strong pixel edge that cuts through no OCR
+word, staying in order; contents stretch with them. Without such an edge the
+model's geometry is kept.
 Invalid or unavailable layouts retain the existing rendering path.
 
 IDE, code-editor, website and desktop classifications select structural rendering
@@ -209,3 +212,38 @@ Actual LMS sanitization still needs verification in the destination instance.
 Approximate model boxes, OCR character errors, unsupported overlapping windows,
 font metrics, missing icons and model misclassification can still reduce fidelity.
 The browser repair pass handles column sizing, not arbitrary incorrect model trees.
+
+
+### Component-specific reconstruction
+
+Detected `code` components reuse the existing gutter cleanup, quote normalization,
+JSON brace repair, language detection, and syntax highlighter. Their gutter width
+is measured from OCR coordinates when available. Editor hints such as Debug and
+text outside numbered code are kept, while cropped strings and commands are not
+completed. Duplicate opening quotes before a nonempty JSON value are normalized
+conservatively. The source OCR spans and transcript remain available unchanged for
+review. `review.code` summarizes the first code component; `review.code_panels`
+records each component's cleanup, including duplicate-quote corrections.
+Syntax colors are the screenshot's own: each OCR row is highlighted to learn
+which letters are keys, strings and so on, and each kind with at least six
+measured letters takes their median ink color (`code_panels[].colors_measured`).
+Kinds without enough letters keep VS Code Dark+.
+
+When OCR was unsure of a word (below 95%) and the vision model read it with
+only lookalike characters changed (I/T, I/l/1, O/0, comma/period, curly/straight
+quotes, or one dropped period), the vision reading is used and listed in
+`review.vision.corrected`. Any other disagreement stays a review suggestion.
+
+Every component, including empty containers, gets its dominant background from
+its source rectangle. UI font choice uses OCR symbol advances where enough are
+available, otherwise word-width measurements. If evidence is insufficient it
+falls back to a UI font for interface controls and monospace for terminals.
+This is a heuristic, not font identification. Code remains monospace. Measurements
+and removed chrome readings appear in `review.panel_features`.
+
+Tabs, toolbars and menus split controls only at a large horizontal gap or a
+measured background change. Multiword labels remain together when those signals
+are absent. Each control uses its measured background in an inline-styled cell.
+A narrow icon-noise rule suppresses short, low-confidence icon-like strings only
+in upper-right sidebar/menu/toolbar chrome. Ordinary labels, filenames, numbers,
+code and ambiguous text remain for review. Icons are not synthesized.

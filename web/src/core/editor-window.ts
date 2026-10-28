@@ -118,12 +118,12 @@ function headerHtml(header: readonly string[]): string {
   return html;
 }
 
-function codeRows(lines: readonly PaintedLine[], hints: readonly EditorHint[], firstLine: number, inherited: string): string {
-  const number = (n: string) => `<td aria-hidden="true" style="width:40px;text-align:right;padding:0 14px 0 0;color:${C.muted};border:none;vertical-align:top;">${n}</td>`;
+export function codeRows(lines: readonly PaintedLine[], hints: readonly EditorHint[], firstLine: number, inherited: string, decorateHints = true, gutterWidth = 40, gutterPadding = 14): string {
+  const number = (n: string) => `<td aria-hidden="true" style="width:${gutterWidth}px;text-align:right;padding:0 ${gutterPadding}px 0 0;color:${decorateHints ? C.muted : inherited};border:none;vertical-align:top;">${n}</td>`;
   const rows: string[] = [];
   lines.forEach((line, i) => {
     for (const hint of hints.filter((h) => h.before === i)) {
-      rows.push(`          <tr aria-hidden="true">${number("")}<td style="padding:0;border:none;${UI}font-size:11px;color:#a9a9a9;">▷ ${escapeHtml(hint.text.replace(/^[▷>D]\s*(?=Debug)/, ""))}</td></tr>`);
+      rows.push(`          <tr aria-hidden="true">${number("")}<td style="padding:0;border:none;${UI}font-size:11px;color:${decorateHints ? "#a9a9a9" : inherited};">${decorateHints ? "▷ " : ""}${escapeHtml(decorateHints ? hint.text.replace(/^[\u25b7>D]\s*(?=Debug)/, "") : hint.text)}</td></tr>`);
     }
     const body = lineText(line)
       ? line.runs.map((r) => (r.color && rgbHex(r.color) !== inherited ? `<span style="color:${rgbHex(r.color)};">${escapeHtml(r.text)}</span>` : escapeHtml(r.text))).join("")
