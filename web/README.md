@@ -249,4 +249,13 @@ measured background change. Multiword labels remain together when those signals
 are absent. Each control uses its measured background in an inline-styled cell.
 A narrow icon-noise rule suppresses short, low-confidence icon-like strings only
 in upper-right sidebar/menu/toolbar chrome. Ordinary labels, filenames, numbers,
-code and ambiguous text remain for review. Icons are not synthesized.
+code and ambiguous text remain for review. Icons are not synthesized, with one
+exception: in a sidebar where at least three rows start with a closed-arrow
+glyph (">"), single arrow lookalikes that start a labelled row are tree arrows
+and are drawn as › (closed) or ⌄ (open, read as "v" or "Y"); each is listed in
+`panel_features[].arrows`.
+
+A code line whose background differs from the panel's, measured across the
+panel on its numbered row (the current line, a selection, a diff band), keeps
+that background (`code.lines_highlighted`). This is skipped when the numbered
+rows don't match the code lines one for one, or when most lines would differ.

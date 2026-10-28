@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { checkCanvasSafe } from "../src/core/canvas";
 import { cleanCode, highlightCode, repairJsonBraces } from "../src/core/code";
-import { parseCrumbs, parseSidebar, parseTabs, renderEditorWindow } from "../src/core/editor-window";
+import { codeRows, parseCrumbs, parseSidebar, parseTabs, renderEditorWindow } from "../src/core/editor-window";
 import { CODE_THEME } from "../src/core/theme";
 
 // As OCR read the panels of a real VS Code screenshot.
@@ -75,5 +75,15 @@ describe("renderEditorWindow", () => {
 
   it("is Canvas-safe", () => {
     expect(checkCanvasSafe(html)).toEqual([]);
+  });
+});
+
+describe("code line backgrounds", () => {
+  it("gives a line its own background, such as the current line", () => {
+    const lines = highlightCode('{\n  "a": 1\n}', "json", CODE_THEME);
+    const html = codeRows(lines, [], 1, "#d4d4d4", false, 40, 8, ["#242526", undefined, undefined]);
+    expect(html.match(/<tr style="background-color:#242526;">/g)).toHaveLength(1);
+    expect(html).toMatch(/<tr style="background-color:#242526;"><td[^>]*>1</);
+    expect(checkCanvasSafe(`<table><tbody>${html}</tbody></table>`)).toEqual([]);
   });
 });

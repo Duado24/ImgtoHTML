@@ -1,11 +1,11 @@
-import { measureFont, chromeNoise, splitItems, itemBox, panelBackground, MONO_FONT, UI_FONT } from "./panel-features";
+import { measureFont, chromeNoise, splitItems, itemBox, panelBackground, treeArrows, MONO_FONT, UI_FONT } from "./panel-features";
 import { renderLayout, checkLayout, refineLayout, type LayoutAttempt, type VisionLayout } from "./vision-layout";
 /** Screenshot → Canvas HTML draft. Pure: takes decoded pixels and OCR
  *  words, returns the files to offer for download. The browser parts
  *  (decoding the image, running OCR) live in src/browser/. */
 
 import { checkCanvasSafe, type CanvasIssue } from "./canvas";
-import { colorsFromWords, contrast, fixContrast, rgbHex, xHeight } from "./colors";
+import { colorDistance, colorsFromWords, contrast, dominantColor, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
 import { buildModel, flagsByRegion, type ReviewState, type ScreenshotModel } from "./model";
 import { cleanCode, detectLanguage, highlightCode, measuredTheme, repairJsonBraces, type CodeCleanup } from "./code";
@@ -18,7 +18,7 @@ import { colorsUsed, mainColor, measureLooks, paintLines, plainLines, type Paint
 import { learnedUsernames, sanitizeLines, sanitizeText } from "./privacy";
 import { segment, type Leaf, type Region } from "./regions";
 import { escapeHtml, render, renderLayoutPanel, renderPanels, type PaintedLeaf } from "./render";
-import { isIconNoise, type Kind, type OcrWord, type Pixels, type RGB } from "./types";
+import { isIconNoise, type Box, type Kind, type OcrWord, type Pixels, type RGB } from "./types";
 import { middle } from "./pymath";
 
 export interface ConvertInput {
@@ -83,8 +83,9 @@ export interface Review {
   /** Code screenshots: detected language and the clean-up applied to the OCR text. */
   /** `colors_measured`: syntax colors taken from the screenshot; the rest are VS Code Dark+. */
   code_panels?: { component: string; cleanup: NonNullable<Review["code"]>; colors_measured: string[] }[];
-  panel_features?: { component: string; font: ReturnType<typeof measureFont>; icons_removed: string[] }[];
-  code: { editor_window: boolean; language: string | null; line_numbers_removed: boolean; lines_outside_code: number; panels_left_out: number; quotes_straightened: number; braces_repaired: number; duplicate_quotes_removed?: number; indent_unit: number | null; lines_snapped: number } | null;
+  /** `arrows`: tree-view arrow glyphs OCR read as letters, drawn as › or ⌄. */
+  panel_features?: { component: string; font: ReturnType<typeof measureFont>; icons_removed: string[]; arrows: { from: string; to: string }[] }[];
+  code: { editor_window: boolean; language: string | null; line_numbers_removed: boolean; lines_outside_code: number; panels_left_out: number; quotes_straightened: number; braces_repaired: number; duplicate_quotes_removed?: number; lines_highlighted?: number; indent_unit: number | null; lines_snapped: number } | null;
   /** Diagrams described by the vision model: size, and labels OCR didn't confirm. */
   diagram: { parts: number; connections: number; unconfirmed_labels: string[] } | null;
   /** The vision model that also read the screenshot, or null when none ran. */
@@ -186,6 +187,25 @@ export type Renderer = "layout" | "editor-window" | "code" | "transcript" | "pan
 const LAID_OUT: readonly string[] = ["ide", "code-editor", "website", "desktop"];
 /** How far (sum of channel differences) a pixel must be from the background to count as ink. */
 const INK = 60;
+
+/** Distance from the panel background at which a code line's own background counts. */
+const LINE_BACKGROUND = 12;
+
+/** Per code line, its background where it differs from the panel's (the
+ *  current line, a selection, a diff or error band), measured across the
+ *  panel on the line's numbered OCR row. Empty when the numbered rows don't
+ *  match the code lines one for one, or when most lines would differ (then
+ *  it's the panel color that was mismeasured, not a highlight). */
+function codeLineBackgrounds(pixels: Pixels, words: readonly OcrWord[], box: Box, panel: RGB, lines: number): (string | undefined)[] {
+  const numbered = layoutWords(words).rows.map((r) => r.words.map((w) => w.word).sort((a, b) => a.x - b.x)).filter((ws) => /^\d{1,4}$/.test(ws[0]?.text ?? ""));
+  if (numbered.length !== lines) return [];
+  const backgrounds = numbered.map((ws) => {
+    const top = Math.min(...ws.map((w) => w.y)), bottom = Math.max(...ws.map((w) => w.y + w.height));
+    const color = dominantColor(pixels, { x: box.x, y: top, width: box.width, height: Math.max(1, bottom - top) });
+    return colorDistance(color, panel) > LINE_BACKGROUND ? rgbHex(color) : undefined;
+  });
+  return backgrounds.filter(Boolean).length * 2 > lines ? [] : backgrounds;
+}
 
 /** The color letter `index` of `word` looks, from its ink pixels inside its
  *  OCR symbol box (or an even slice of the word box when the engine gave no
@@ -319,14 +339,25 @@ export function convert(input: ConvertInput): ConvertResult {
           return ordered[0] && /^\d{1,4}$/.test(ordered[0].text) && ordered[1] ? [ordered[1].x] : [];
         });
         const gutterWidth = codeStarts.length >= 3 ? Math.max(20, Math.min(...codeStarts) - box.x - 8) : 40;
-        const rows = cleaned.lineNumbersRemoved ? codeRows(highlighted, cleaned.hints, cleaned.firstLine, rgbHex(palette.colors.text), false, gutterWidth, codeStarts.length >= 3 ? 8 : 14)
+        const lineBackgrounds = codeLineBackgrounds(pixels, panelWords, box, bg, highlighted.length);
+        details.lines_highlighted = lineBackgrounds.filter(Boolean).length;
+        const rows = cleaned.lineNumbersRemoved ? codeRows(highlighted, cleaned.hints, cleaned.firstLine, rgbHex(palette.colors.text), false, gutterWidth, codeStarts.length >= 3 ? 8 : 14, lineBackgrounds)
           : highlighted.map((l) => `<tr><td style="padding:0;white-space:pre;">${l.runs.map((r) => `<span style="color:${rgbHex(r.color ?? palette.colors.text)};">${escapeHtml(r.text)}</span>`).join("")}</td></tr>`).join("");
         return `<div style="min-height:${Math.round(box.height)}px;background-color:${rgbHex(bg)};color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};overflow:hidden;">${plain(cleaned.header)}<table style="width:100%;border-collapse:collapse;border:none;color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};"><tbody>${rows}</tbody></table>${plain(suffix)}</div>`;
       }
       const removed = component ? panelWords.filter((w) => chromeNoise(w, component)) : [];
-      const visible = panelWords.filter((w) => !removed.includes(w));
+      const arrows = component ? treeArrows(panelWords, component) : new Map<OcrWord, string>();
+      const visible = panelWords.filter((w) => !removed.includes(w)).map((w) => {
+        const text = arrows.get(w);
+        if (text === undefined) return w;
+        // Same box and measured look, drawn as the arrow it is.
+        const arrow = { ...w, text, symbols: undefined };
+        const look = looks.get(w);
+        if (look) looks.set(arrow, { ...look, letters: [look.letters.find(Boolean)] });
+        return arrow;
+      });
       const font = measureFont(visible, component?.type === "terminal" ? MONO_FONT : UI_FONT);
-      if (component) panelFeatures.push({ component: component.id, font, icons_removed: removed.map((w) => w.text) });
+      if (component) panelFeatures.push({ component: component.id, font, icons_removed: removed.map((w) => w.text), arrows: [...arrows].map(([w, to]) => ({ from: w.text, to })) });
       const draw = (ws: OcrWord[], bounds: typeof box) => {
         const background = bounds.height > 0 ? panelBackground(pixels, bounds) : bg;
         const panel = paintLeaf(pixels, { kind: "leaf", box: bounds, background, words: ws }, looks);

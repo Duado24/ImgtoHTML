@@ -118,7 +118,9 @@ function headerHtml(header: readonly string[]): string {
   return html;
 }
 
-export function codeRows(lines: readonly PaintedLine[], hints: readonly EditorHint[], firstLine: number, inherited: string, decorateHints = true, gutterWidth = 40, gutterPadding = 14): string {
+/** `backgrounds`: per code line, a background that differs from the panel's
+ *  (the current line, a selection), or undefined. */
+export function codeRows(lines: readonly PaintedLine[], hints: readonly EditorHint[], firstLine: number, inherited: string, decorateHints = true, gutterWidth = 40, gutterPadding = 14, backgrounds: readonly (string | undefined)[] = []): string {
   const number = (n: string) => `<td aria-hidden="true" style="width:${gutterWidth}px;text-align:right;padding:0 ${gutterPadding}px 0 0;color:${decorateHints ? C.muted : inherited};border:none;vertical-align:top;">${n}</td>`;
   const rows: string[] = [];
   lines.forEach((line, i) => {
@@ -128,7 +130,7 @@ export function codeRows(lines: readonly PaintedLine[], hints: readonly EditorHi
     const body = lineText(line)
       ? line.runs.map((r) => (r.color && rgbHex(r.color) !== inherited ? `<span style="color:${rgbHex(r.color)};">${escapeHtml(r.text)}</span>` : escapeHtml(r.text))).join("")
       : "";
-    rows.push(`          <tr>${number(String(firstLine + i))}<td style="padding:0;border:none;white-space:pre;">${body}</td></tr>`);
+    rows.push(`          <tr${backgrounds[i] ? ` style="background-color:${backgrounds[i]};"` : ""}>${number(String(firstLine + i))}<td style="padding:0;border:none;white-space:pre;">${body}</td></tr>`);
   });
   return rows.join("\n");
 }

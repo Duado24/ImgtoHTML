@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { measureFont, MONO_FONT, UI_FONT, splitItems, chromeNoise } from "../src/core/panel-features";
+import { measureFont, MONO_FONT, UI_FONT, splitItems, chromeNoise, treeArrows } from "../src/core/panel-features";
 import { convert } from "../src/core/convert";
 import { checkCanvasSafe } from "../src/core/canvas";
 import { validateLayout } from "../src/core/vision-layout";
@@ -58,5 +58,24 @@ describe("measured panel features", () => {
     expect(result.model.regions.flatMap((r) => r.lines.flatMap((l) => l.spans)).some((s) => s.text.includes("cropped"))).toBe(true);
     expect(checkCanvasSafe(result.html)).toEqual([]);
     expect(result.html).toContain('id="layout-editor" style="min-width:0;overflow:hidden;background-color:#181818;');
+  });
+});
+
+describe("tree arrows", () => {
+  const sidebar = validateLayout(fixture, 1033, 367)!.components.find((c) => c.type === "sidebar")!;
+  // As OCR read the VS Code Explorer: closed folders ">", open ones "v" or "Y".
+  const tree = [word("v", 5, 40), word("ImgHtml", 20, 40), word(">", 12, 60), word(".venv", 26, 60), word(">", 12, 80), word("docs", 26, 80),
+    word(">", 12, 100), word("out", 26, 100), word("Y", 12, 120), word("web", 26, 120)];
+
+  it("draws a sidebar's arrow glyphs as › and ⌄", () => {
+    const arrows = treeArrows(tree, sidebar);
+    expect([...arrows.values()]).toEqual(["⌄", "›", "›", "›", "⌄"]);
+    expect([...arrows.keys()].map((w) => w.text)).toEqual(["v", ">", ">", ">", "Y"]);
+  });
+  it("leaves letters alone without a column of closed arrows, or outside a sidebar", () => {
+    expect(treeArrows([word("v", 5, 40), word("ImgHtml", 20, 40), word("Y", 12, 120), word("web", 26, 120)], sidebar).size).toBe(0);
+    expect(treeArrows(tree, { ...sidebar, type: "content" }).size).toBe(0);
+    const lone = word("v", 12, 140); // no label after it: not an arrow
+    expect(treeArrows([...tree, lone], sidebar).has(lone)).toBe(false);
   });
 });

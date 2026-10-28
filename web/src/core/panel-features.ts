@@ -28,6 +28,33 @@ export function chromeNoise(word: OcrWord, component: LayoutComponent): boolean 
   return /^(?:[aeiou]{3,}|@[a-z]{2,}|[^a-z0-9]{2,})$/i.test(word.text);
 }
 
+const CLOSED_ARROW = /^[>›»]$/;
+const OPEN_ARROW = /^[vVyY⌄]$/;
+/** Rows with a closed-arrow glyph needed before a panel counts as a tree. */
+const TREE_ROWS = 3;
+
+/** Tree views (a sidebar's folders) start rows with disclosure arrows, which
+ *  OCR reads as ">" and "v" or "Y". Where at least TREE_ROWS rows of a sidebar
+ *  start with a closed-arrow glyph, every single-glyph arrow lookalike that
+ *  starts a row (and has a label after it) is drawn as › (closed) or ⌄ (open).
+ *  Returns the words to redraw, with their new text. */
+export function treeArrows(words: readonly OcrWord[], component: LayoutComponent): Map<OcrWord, string> {
+  const arrows = new Map<OcrWord, string>();
+  if (component.type !== "sidebar") return arrows;
+  const rows = new Map<number, OcrWord[]>();
+  for (const w of words) {
+    const row = [...rows.keys()].find((y) => Math.abs(y - (w.y + w.height / 2)) < w.height / 2) ?? w.y + w.height / 2;
+    rows.set(row, [...(rows.get(row) ?? []), w]);
+  }
+  const leads = [...rows.values()].map((ws) => [...ws].sort((a, b) => a.x - b.x)).filter((ws) => ws.length > 1).map((ws) => ws[0]!);
+  if (leads.filter((w) => CLOSED_ARROW.test(w.text)).length < TREE_ROWS) return arrows;
+  for (const w of leads) {
+    if (CLOSED_ARROW.test(w.text)) arrows.set(w, "›");
+    else if (OPEN_ARROW.test(w.text)) arrows.set(w, "⌄");
+  }
+  return arrows;
+}
+
 /** Separate visible controls only at a substantial gap or a measured background boundary. */
 export function splitItems(words: readonly OcrWord[], pixels: Pixels): OcrWord[][] {
   const ordered = [...words].sort((a, b) => a.x - b.x);
