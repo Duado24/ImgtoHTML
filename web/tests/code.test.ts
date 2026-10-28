@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { cleanCode, detectLanguage, highlightCode, measuredTheme } from "../src/core/code";
 import { lineText } from "../src/core/paint";
 import { CODE_THEME } from "../src/core/theme";
+import { letterInk } from "../src/core/convert";
 
 describe("cleanCode", () => {
   it("removes gutter line numbers and keeps indentation after them", () => {
@@ -93,14 +94,23 @@ describe("measuredTheme", () => {
   const ink = (w: { text: string }) => (w.text.endsWith(":") ? green : blue);
 
   it("takes each kind of token's color from the screenshot", () => {
-    const { theme, measured } = measuredTheme(rows, "json", CODE_THEME, (w) => ink(w));
+    const { theme, measured } = measuredTheme(rows, "json", CODE_THEME, (w) => [ink(w)]);
     expect(measured).toEqual(expect.arrayContaining(["sky", "red"]));
     expect(theme.colors.sky).toEqual(green);
     expect(theme.colors.red).toEqual(blue);
     expect(theme.colors.magenta).toEqual(CODE_THEME.colors.magenta);
   });
+  it("measures a letter's hue from all its ink and its strength from the core", () => {
+    // One 4×1 letter on black: two pale core pixels, two dimmer, bluer edge pixels.
+    const core = [181, 213, 251], edge = [66, 100, 140];
+    const data = new Uint8ClampedArray([...edge, 255, ...core, 255, ...core, 255, ...edge, 255]);
+    const word = { text: "a", x: 0, y: 0, width: 4, height: 1, confidence: 99, block: 0, paragraph: 0, line: 0 };
+    const [color] = letterInk({ width: 4, height: 1, data }, word, 0, [0, 0, 0]);
+    expect(color).toEqual([168, 212, 255]); // bluer than the core, as strong
+    expect(letterInk({ width: 4, height: 1, data: new Uint8ClampedArray(16) }, word, 0, [0, 0, 0])).toEqual([]);
+  });
   it("keeps the theme's color without enough letters to measure", () => {
-    const { measured } = measuredTheme([[{ text: '"a":' }]], "json", CODE_THEME, (w) => ink(w));
+    const { measured } = measuredTheme([[{ text: '"a":' }]], "json", CODE_THEME, (w) => [ink(w)]);
     expect(measured).not.toContain("sky");
   });
 });

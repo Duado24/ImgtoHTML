@@ -270,18 +270,19 @@ const straight = (text: string) => text.replace(/[“”„‟″]/g, '"').repla
 /** The theme with each syntax color replaced by the screenshot's own, where
  *  the screenshot shows enough letters of that kind. Each OCR row is
  *  highlighted on its own to learn which kind every letter is (a JSON key,
- *  a string…); `letterColor` is that letter's measured ink color. Works for
- *  any editor theme: no colors are assumed, only the kinds of token. */
+ *  a string…); `letterInk` gives that letter's ink pixels in the screenshot.
+ *  Works for any editor theme: no colors are assumed, only the kinds of token. */
 export function measuredTheme(
   rows: readonly (readonly { text: string }[])[],
   language: string | null,
   base: Theme,
-  letterColor: (word: { text: string }, index: number) => RGB | undefined,
+  letterInk: (word: { text: string }, index: number) => readonly RGB[],
 ): { theme: Theme; measured: Slot[] } {
   // Highlight with a probe theme whose colors encode their slot.
   const slots = Object.keys(base.colors) as Slot[];
   const probe: Theme = { ...base, colors: Object.fromEntries(slots.map((s, i) => [s, [i + 1, 0, 0]])) as unknown as Theme["colors"] };
   const samples = new Map<Slot, RGB[]>();
+  const letters = new Map<Slot, number>();
   for (const row of rows) {
     const line = highlightCode(straight(row.map((w) => w.text).join(" ")), language, probe)[0];
     if (!line) continue;
@@ -294,19 +295,19 @@ export function measuredTheme(
     for (const word of row) {
       for (let i = 0; i < word.text.length; i++) {
         const kind = kinds[offset + i];
-        const color = letterColor(word, i);
-        if (kind && color && /\S/.test(word.text[i]!)) samples.set(kind, [...(samples.get(kind) ?? []), color]);
+        const ink = letterInk(word, i);
+        if (!kind || !ink.length || !/\S/.test(word.text[i]!)) continue;
+        samples.set(kind, [...(samples.get(kind) ?? []), ...ink]);
+        letters.set(kind, (letters.get(kind) ?? 0) + 1);
       }
       offset += word.text.length + 1;
     }
   }
   const median = (ns: number[]) => [...ns].sort((a, b) => a - b)[ns.length >> 1]!;
-  const measured = slots.filter((s) => (samples.get(s)?.length ?? 0) >= MIN_LETTERS);
+  const middle = (cs: RGB[]): RGB => [median(cs.map((c) => c[0])), median(cs.map((c) => c[1])), median(cs.map((c) => c[2]))];
+  const measured = slots.filter((s) => (letters.get(s) ?? 0) >= MIN_LETTERS);
   const colors = { ...base.colors };
-  for (const s of measured) {
-    const cs = samples.get(s)!;
-    colors[s] = [median(cs.map((c) => c[0])), median(cs.map((c) => c[1])), median(cs.map((c) => c[2]))];
-  }
+  for (const s of measured) colors[s] = middle(samples.get(s)!);
   return { theme: { ...base, name: `${base.name}+measured`, colors }, measured };
 }
 

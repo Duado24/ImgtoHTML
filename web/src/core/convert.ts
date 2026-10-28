@@ -18,7 +18,7 @@ import { colorsUsed, mainColor, measureLooks, paintLines, plainLines, type Paint
 import { learnedUsernames, sanitizeLines, sanitizeText } from "./privacy";
 import { segment, type Leaf, type Region } from "./regions";
 import { escapeHtml, render, renderLayoutPanel, renderPanels, type PaintedLeaf } from "./render";
-import { isIconNoise, type Kind, type OcrWord, type Pixels } from "./types";
+import { isIconNoise, type Kind, type OcrWord, type Pixels, type RGB } from "./types";
 import { middle } from "./pymath";
 
 export interface ConvertInput {
@@ -184,6 +184,37 @@ function editorPanel(tree: Region): { leaf: Leaf; cleaned: CodeCleanup } {
 export type Renderer = "layout" | "editor-window" | "code" | "transcript" | "panels" | "rows";
 /** Applications whose component tree replaces the chosen screenshot type. */
 const LAID_OUT: readonly string[] = ["ide", "code-editor", "website", "desktop"];
+/** How far (sum of channel differences) a pixel must be from the background to count as ink. */
+const INK = 60;
+
+/** The color letter `index` of `word` looks, from its ink pixels inside its
+ *  OCR symbol box (or an even slice of the word box when the engine gave no
+ *  symbols). Smoothed screen text has pale cores and colorful edges, and the
+ *  eye blends them: the hue comes from all the ink (away from the
+ *  background), the strength from the core, the half farthest from it.
+ *  Empty when the letter shows no ink. */
+export function letterInk(pixels: Pixels, word: OcrWord, index: number, background?: RGB): RGB[] {
+  if (!background) return [];
+  const symbols = word.symbols?.map((s) => s.text).join("") === word.text ? word.symbols : undefined;
+  const slice = word.width / Math.max(1, word.text.length);
+  const box = symbols?.[index] ?? { x: word.x + slice * index, y: word.y, width: slice, height: word.height };
+  const ink: { color: RGB; distance: number }[] = [];
+  for (let y = Math.max(0, Math.floor(box.y)); y < Math.min(pixels.height, Math.ceil(box.y + box.height)); y++) {
+    for (let x = Math.max(0, Math.floor(box.x)); x < Math.min(pixels.width, Math.ceil(box.x + box.width)); x++) {
+      const o = (y * pixels.width + x) * 4;
+      const color: RGB = [pixels.data[o]!, pixels.data[o + 1]!, pixels.data[o + 2]!];
+      const distance = Math.abs(color[0] - background[0]) + Math.abs(color[1] - background[1]) + Math.abs(color[2] - background[2]);
+      if (distance > INK) ink.push({ color, distance });
+    }
+  }
+  if (!ink.length) return [];
+  const away = [0, 1, 2].map((c) => ink.reduce((n, p) => n + p.color[c]! - background[c]!, 0) / ink.length);
+  const core = ink.sort((a, b) => b.distance - a.distance).slice(0, Math.ceil(ink.length / 2));
+  const strength = core.reduce((n, p) => n + p.distance, 0) / core.length;
+  const scale = strength / Math.max(1, Math.abs(away[0]!) + Math.abs(away[1]!) + Math.abs(away[2]!));
+  const channel = (c: number) => Math.round(Math.min(255, Math.max(0, background[c]! + away[c]! * scale)));
+  return [[channel(0), channel(1), channel(2)]];
+}
 
 export function convert(input: ConvertInput): ConvertResult {
   const { pixels, animated } = input;
@@ -272,7 +303,7 @@ export function convert(input: ConvertInput): ConvertResult {
         const normalized = language === "json" ? repaired.lines.map((l) => l.replace(/^(\s*"[^"]+"\s*:\s*)"{2}(?=[\p{L}\p{N}_./])/u, '$1"')) : repaired.lines;
         // The screenshot's own syntax colors where it shows enough of each kind; Dark+ otherwise.
         const ocrRows = layoutWords(panelWords).rows.map((r) => r.words.map((w) => w.word));
-        const { theme: own, measured } = measuredTheme(ocrRows, language, CODE_THEME, (w, i) => looks.get(w as OcrWord)?.letters[i]);
+        const { theme: own, measured } = measuredTheme(ocrRows, language, CODE_THEME, (w, i) => letterInk(pixels, w as OcrWord, i, looks.get(w as OcrWord)?.background));
         const palette = { ...own, background: bg, colors: Object.fromEntries(Object.entries(own.colors).map(([k, color]) => [k, fixContrast(color, bg)])) as typeof CODE_THEME.colors };
         const highlighted = highlightCode(normalized.join("\n"), language, palette).map((line) => ({ ...line, runs: line.runs.map((run) => ({ ...run, color: run.color ? fixContrast(run.color, bg) : undefined })) }));
         painted.push(...highlighted);

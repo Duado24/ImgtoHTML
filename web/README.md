@@ -226,7 +226,10 @@ review. `review.code` summarizes the first code component; `review.code_panels`
 records each component's cleanup, including duplicate-quote corrections.
 Syntax colors are the screenshot's own: each OCR row is highlighted to learn
 which letters are keys, strings and so on, and each kind with at least six
-measured letters takes their median ink color (`code_panels[].colors_measured`).
+measured letters takes their median color (`code_panels[].colors_measured`).
+A letter's color takes its hue from all its ink pixels and its strength from
+its core (the half farthest from the background), since smoothed screen text
+has pale cores and colorful edges that the eye blends.
 Kinds without enough letters keep VS Code Dark+.
 
 When OCR was unsure of a word (below 95%) and the vision model read it with
