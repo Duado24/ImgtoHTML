@@ -147,3 +147,65 @@ rendering, icon filtering, downloads instead of automatic disk outputs, and
 local OCR preprocessing/panel passes. OCR text is not guaranteed byte-for-byte
 identical between engines. Comparison-page styles are separate from the
 Canvas fragment; the original screenshot embedded there is not privacy-masked.
+
+
+## Vision layout reconstruction
+
+When Ollama is available, conversion now asks the existing Qwen3-VL model for a
+whole-image application classification and component tree before rendering.
+Components include sidebars, editors, tabs, breadcrumbs, code, menus, toolbars,
+terminal panes and content containers. The model answers on Qwen3-VL's native
+0–1000 grid, which is scaled to image pixels. Invalid IDs, cycles, missing
+parents, out-of-bounds boxes and overlapping siblings are rejected. One bounded
+model retry, told the first problem found, requests a corrected hierarchy.
+Strong full-height pixel separators refine approximate column boundaries.
+Invalid or unavailable layouts retain the existing rendering path.
+
+IDE, code-editor, website and desktop classifications select structural rendering
+even when the submitted type was terminal. Terminal-only screenshots keep the
+existing terminal renderer. Diagram mode, transcript overrides and disabling the
+editor-window option retain their existing paths. Layout metadata appears in
+`review.layout`. `review.layout_status` names the renderer that drew the HTML
+(`layout`, `editor-window`, `code`, `transcript`, `panels` or `rows`), the reason
+the layout wasn't used, and each model answer with why it was rejected.
+`review.server_build` matches `GET /api/version`; `start.sh` restarts a running
+server whose build differs from `dist-server/index.js`. No vision transcription becomes rendered text: masked OCR words
+are assigned once to the smallest containing component; unmatched words are kept
+in a trailing fallback block. Review alternatives and manual edits still work.
+
+Column structure uses inline-styled tables; component contents use inline-styled
+divs. Widths adapt to the host, with local horizontal scrolling on narrow screens.
+There are no runtime scripts, remote resources or stylesheets in exported HTML.
+
+For optional browser validation, install development dependencies and Chromium:
+
+    npm ci
+    npx playwright install chromium
+    IMGTOHTML_VALIDATE_LAYOUT=1 npm start
+
+Validation measures component boundaries in Chromium against source-coordinate
+boxes and reports errors exceeding 8% of image width/height. It also records a
+normalized pixel difference at 128 x 64 resolution. Pixel differences are diagnostic,
+not an OCR correction signal. A bounded repair pass fixes distorted table column
+widths and cell padding only when it reduces discrepancies and keeps rendered
+text unchanged. Unresolved errors remain in `review.visual_validation`; missing
+browser tooling is reported there without failing conversion. Validation is off
+by default because starting Chromium adds latency and memory usage.
+
+Run the deterministic VS Code browser regression with:
+
+    npm run test:layout
+    npm run test:layout -- --live
+
+The first uses checked-in geometry annotations and the existing local screenshot
+`fixtures/code/vscode-package-json.png`, runs real OCR, writes HTML/screenshot/report
+to `eval-results/layout`, and verifies recovery from deliberately damaged columns.
+The second exercises the installed Qwen model's layout detection. Screenshot
+fixtures remain local under the repository's existing privacy policy. Unit tests
+use synthetic OCR plus the geometry annotations and need neither Ollama nor Chromium.
+
+Canvas checks use this project's approximate allowlist, not a live Canvas server.
+Actual LMS sanitization still needs verification in the destination instance.
+Approximate model boxes, OCR character errors, unsupported overlapping windows,
+font metrics, missing icons and model misclassification can still reduce fidelity.
+The browser repair pass handles column sizing, not arbitrary incorrect model trees.

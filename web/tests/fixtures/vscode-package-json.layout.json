@@ -1,0 +1,10 @@
+{
+  "application": "ide",
+  "components": [
+    {"id":"explorer","type":"sidebar","parent":null,"box":{"x":0,"y":0,"width":295,"height":367}},
+    {"id":"editor","type":"editor","parent":null,"box":{"x":295,"y":0,"width":738,"height":367}},
+    {"id":"tabs","type":"tabs","parent":"editor","box":{"x":295,"y":0,"width":738,"height":25}},
+    {"id":"breadcrumbs","type":"breadcrumbs","parent":"editor","box":{"x":295,"y":25,"width":738,"height":22}},
+    {"id":"code","type":"code","parent":"editor","box":{"x":295,"y":47,"width":738,"height":320}}
+  ]
+}

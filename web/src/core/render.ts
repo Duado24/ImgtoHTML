@@ -169,3 +169,9 @@ export function renderPanels(
   );
   return figure(label, root, caption);
 }
+
+/** Compact component content; structural positioning belongs to its parent. */
+export function renderLayoutPanel(panel: PaintedLeaf, background: RGB, foreground: RGB, height = 0): string {
+  return `<div style="box-sizing:border-box;min-width:0;min-height:${Math.round(height)}px;overflow:hidden;background-color:${rgbHex(background)};color:${rgbHex(foreground)};font:13px/1.45 Consolas,'Courier New',monospace;padding:0 4px;">` +
+    panel.lines.map((line) => lineDiv(line, "white-space:pre;", "", foreground)).join("") + "</div>";
+}

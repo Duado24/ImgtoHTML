@@ -1,3 +1,4 @@
+import { renderLayout, checkLayout, refineLayout, type LayoutAttempt, type VisionLayout } from "./vision-layout";
 /** Screenshot → Canvas HTML draft. Pure: takes decoded pixels and OCR
  *  words, returns the files to offer for download. The browser parts
  *  (decoding the image, running OCR) live in src/browser/. */
@@ -15,7 +16,7 @@ import { applyTheme, themeFor } from "./theme";
 import { colorsUsed, mainColor, measureLooks, paintLines, plainLines, type PaintedLine, type WordLook } from "./paint";
 import { learnedUsernames, sanitizeLines, sanitizeText } from "./privacy";
 import { segment, type Leaf, type Region } from "./regions";
-import { render, renderPanels, type PaintedLeaf } from "./render";
+import { render, renderLayoutPanel, renderPanels, type PaintedLeaf } from "./render";
 import { isIconNoise, type Kind, type OcrWord, type Pixels } from "./types";
 import { middle } from "./pymath";
 
@@ -33,6 +34,7 @@ export interface ConvertInput {
   transcript?: string | null;
   /** Code screenshots: draw the editor window (sidebar, tabs, line numbers). Default true. */
   editorWindow?: boolean;
+  layout?: VisionLayout | null;
 }
 
 export interface ColorChange {
@@ -45,6 +47,18 @@ export interface ColorChange {
 /** Same fields as the Python _review.json, plus what the HTML uses. */
 export interface Review {
   type: Kind;
+  layout?: VisionLayout | null;
+  /** Which renderer drew the HTML and, when it isn't the layout renderer, why. */
+  layout_status: {
+    renderer: Renderer;
+    application: VisionLayout["application"] | null;
+    reason: string | null;
+    /** Server only: each answer the vision model gave, and why it was rejected. */
+    attempts?: LayoutAttempt[];
+  };
+  /** Server only: the build that produced this result (see /api/version). */
+  server_build?: string;
+  visual_validation?: { discrepancies: { component: string; error: number }[]; pixelMeanAbsoluteError: number; repaired: boolean; error?: string };
   low_confidence_words: UncertainWord[];
   original_colors: { background: string; foreground: string };
   contrast_changes: ColorChange[];
@@ -162,8 +176,25 @@ function editorPanel(tree: Region): { leaf: Leaf; cleaned: CodeCleanup } {
   });
 }
 
+export type Renderer = "layout" | "editor-window" | "code" | "transcript" | "panels" | "rows";
+/** Applications whose component tree replaces the chosen screenshot type. */
+const LAID_OUT: readonly string[] = ["ide", "code-editor", "website", "desktop"];
+
 export function convert(input: ConvertInput): ConvertResult {
-  const { kind, pixels, animated } = input;
+  const { pixels, animated } = input;
+  const checked = input.layout ? checkLayout(input.layout, pixels.width, pixels.height) : null;
+  const detected = checked?.layout ? refineLayout(checked.layout, pixels) : null;
+  const skipLayout =
+    input.kind === "diagram" ? "diagrams are described, not laid out"
+    : input.transcript?.trim() ? "a corrected transcript was given"
+    : input.editorWindow === false ? "the editor window option is off"
+    : !checked ? "no layout was detected"
+    : !detected ? `the layout was invalid: ${checked.problem}`
+    : !LAID_OUT.includes(detected.application) ? `"${detected.application}" screenshots use the ${input.kind} renderer`
+    : null;
+  const layout = skipLayout === null ? detected : null;
+  const kind = layout ? "interface" : input.kind;
+  let renderer: Renderer;
 
   // Empty text boxes send "" rather than nothing: blank means "not given".
   let label = input.label?.trim() || null;
@@ -217,7 +248,19 @@ export function convert(input: ConvertInput): ConvertResult {
   let panels = 1;
   let code: Review["code"] = null;
 
-  if (kind === "code" && theme) {
+  if (layout) {
+    renderer = "layout";
+    textLines = ocr.lines;
+    uncertain = ocr.uncertain;
+    painted = [];
+    html = renderLayout(layout, words, pixels.width, label, caption, (panelWords, box) => {
+      const bg = colorsFromWords(pixels, panelWords).background;
+      const panel = paintLeaf(pixels, { kind: "leaf", box, background: bg, words: panelWords }, looks);
+      painted.push(...panel.lines);
+      return renderLayoutPanel(panel, bg, fixContrast(foreground, bg), box.height);
+    });
+    panels = layout.components.length;
+  } else if (kind === "code" && theme) {
     // Code is re-highlighted by language rather than painted from pixels.
     // A corrected transcript is used as typed; OCR text is cleaned first,
     // from the editor panel only (not the sidebar or terminal beside it).
@@ -233,6 +276,7 @@ export function convert(input: ConvertInput): ConvertResult {
     // Draw the editor window (sidebar, tabs, line numbers) when the
     // screenshot is an editor with numbered lines, unless turned off.
     const framed = editor !== null && cleaned!.lineNumbersRemoved && input.editorWindow !== false;
+    renderer = framed ? "editor-window" : "code";
     if (framed) {
       const sidebar = leaves(tree)
         .filter((l) => l !== editor.leaf && l.words.length && l.box.x + l.box.width <= editor.leaf.box.x + 4)
@@ -260,11 +304,13 @@ export function convert(input: ConvertInput): ConvertResult {
     };
   } else if (transcript !== null) {
     // Corrected text has no positions, so: one color, one box.
+    renderer = "transcript";
     textLines = sanitizeLines(transcript.split("\n")).lines;
     uncertain = [];
     painted = plainLines(textLines);
     html = render(painted, kind, label, boxBackground, boxText, caption);
   } else if (kind === "interface" && tree.kind === "split") {
+    renderer = "panels";
     textLines = ocr.lines;
     uncertain = ocr.uncertain;
     painted = [];
@@ -280,6 +326,7 @@ export function convert(input: ConvertInput): ConvertResult {
     );
     panels = panelsFound;
   } else {
+    renderer = "rows";
     textLines = ocr.lines;
     uncertain = ocr.uncertain;
     painted = paintLines(ocr.rows, background, looks);
@@ -300,6 +347,8 @@ export function convert(input: ConvertInput): ConvertResult {
 
   const review: Review = {
     type: kind,
+    layout,
+    layout_status: { renderer, application: checked?.layout?.application ?? null, reason: skipLayout },
     low_confidence_words: uncertain,
     original_colors: {
       background: rgbHex(measured.background),

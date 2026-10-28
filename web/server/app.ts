@@ -4,6 +4,7 @@ import staticFiles from "@fastify/static";
 import { fileURLToPath } from "node:url";
 import { isKind } from "../src/core/types";
 import { MAX_UPLOAD_BYTES } from "../src/shared/api";
+import { BUILD_ID, STARTED } from "./build";
 import { decodeImage, InvalidImage } from "./image";
 import { Jobs, ReviewError } from "./jobs";
 import type { Job } from "../src/shared/api";
@@ -91,6 +92,8 @@ export async function createApp(options: AppOptions = {}) {
       if (!submitted) active--;
     }
   });
+
+  app.get("/api/version", async () => ({ build: BUILD_ID, started: STARTED, pid: process.pid }));
 
   app.get<{ Params: { id: string } }>("/api/jobs/:id", async (request, reply) => {
     const job = jobs.get(request.params.id);

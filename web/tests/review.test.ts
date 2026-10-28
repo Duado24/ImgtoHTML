@@ -105,3 +105,37 @@ describe("review actions", () => {
     expect((await post(app, "nope", "decide", { region: "r1", state: "approved" })).statusCode).toBe(409);
   });
 });
+
+
+describe("layout session integration", () => {
+  it("uses vision geometry even when the submitted mode is terminal", async () => {
+    const detectLayout = vi.fn().mockResolvedValue({ attempts: [], layout: { application: "ide", components: [
+      { id: "sidebar", type: "sidebar", parent: null, box: { x: 0, y: 0, width: 65, height: 40 } },
+      { id: "editor", type: "editor", parent: null, box: { x: 65, y: 0, width: 135, height: 40 } },
+    ] } });
+    const { first } = await setup({ name: "test", detectLayout, analyze: async () => [] });
+    expect(detectLayout).toHaveBeenCalledOnce();
+    expect(first.review.type).toBe("interface");
+    expect(first.review.layout_status).toMatchObject({ renderer: "layout", application: "ide", reason: null });
+    expect(first.review.server_build).toBe("dev");
+    expect(first.html).toContain('id="layout-sidebar"');
+    expect(first.html).toContain('id="layout-editor"');
+    expect(first.review.vision?.model).toBe("test");
+  });
+  it("falls back to OCR rendering when layout detection fails, and says why", async () => {
+    const { first } = await setup({ name: "test", detectLayout: async () => { throw new Error("unavailable"); }, analyze: async () => [] });
+    expect(first.review.type).toBe("terminal");
+    expect(first.html).not.toContain("layout-sidebar");
+    expect(first.review.vision?.error).toContain("Layout detection");
+    expect(first.review.layout_status).toMatchObject({ renderer: "rows", reason: "layout detection failed: unavailable" });
+  });
+  it("reports the model's answers when every layout was rejected", async () => {
+    const attempts = [{ output: { application: "website", components: [] }, problem: "no components" }];
+    const { first } = await setup({ name: "test", detectLayout: async () => ({ layout: null, attempts }), analyze: async () => [] });
+    expect(first.review.layout_status).toEqual({ renderer: "rows", application: null, reason: "the model's layout was rejected: no components", attempts });
+  });
+  it("says when the vision model is off", async () => {
+    const { first } = await setup();
+    expect(first.review.layout_status.reason).toBe("the vision model is off");
+  });
+});

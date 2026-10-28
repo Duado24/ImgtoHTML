@@ -1,3 +1,6 @@
+import { checkCanvasSafe } from "../src/core/canvas";
+import type { LayoutDetection } from "../src/core/vision-layout";
+import { BUILD_ID } from "./build";
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -40,6 +43,9 @@ interface Session {
   /** Diagrams: the vision model's parts and connections. */
   diagram?: Diagram;
   visionError?: string;
+  layout?: LayoutDetection;
+  /** Why no layout was asked for, or how asking failed. */
+  layoutNote?: string;
   decisions: Map<string, ReviewState>;
   /** Regions with a word the reviewer changed (approving them records "corrected"). */
   edited: Set<string>;
@@ -93,7 +99,15 @@ export class Jobs {
   /** Convert again from the session's words, readings and decisions. */
   private finalize(session: Session): JobResult {
     const { input, image } = session;
-    let result: ConvertResult = convert({ ...input, pixels: image.pixels, animated: image.animated, words: session.words });
+    let result: ConvertResult = convert({ ...input, pixels: image.pixels, animated: image.animated, words: session.words, layout: session.layout?.layout });
+    // convert() only knows no layout reached it; say why.
+    const status = { ...result.review.layout_status, attempts: session.layout?.attempts ?? [] };
+    if (!session.layout?.layout && status.reason === "no layout was detected") {
+      const problem = session.layout?.attempts.at(-1)?.problem;
+      status.reason = session.layoutNote ?? (problem ? `the model's layout was rejected: ${problem}` : status.reason);
+    }
+    const review = { ...result.review, layout_status: status, server_build: BUILD_ID };
+    result = { ...result, review, reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) } };
     if (this.usesVision) {
       const readings = session.readings.flatMap((reading) => {
         const best = result.model.regions.reduce<{ id: string; area: number } | null>((top, r) => {
@@ -118,7 +132,22 @@ export class Jobs {
       const progress = (text: string) => (entry.job = { id, status: "running", progress: text });
       try {
         await work(progress);
-        entry.job = { id, status: "completed", result: this.finalize(entry.session!) };
+        let result = this.finalize(entry.session!);
+        if (process.env.IMGTOHTML_VALIDATE_LAYOUT === "1" && result.review.layout) {
+          progress("Validating layout in Chromium...");
+          try {
+            const { validateVisual } = await import("./visual-validation");
+            const session = entry.session!;
+            const report = await validateVisual(result.html, session.image.png, result.review.layout, session.image.pixels.width, session.image.pixels.height);
+            result = { ...result, html: report.html, htmlFile: { ...result.htmlFile, content: report.html }, review: { ...result.review,
+              canvas_issues: checkCanvasSafe(report.html), visual_validation: { discrepancies: report.discrepancies, pixelMeanAbsoluteError: report.pixelMeanAbsoluteError, repaired: report.repaired } } };
+          } catch (error) {
+            result.review.visual_validation = { discrepancies: [], pixelMeanAbsoluteError: 0, repaired: false, error: message(error) };
+          }
+          result.reviewFile = { ...result.reviewFile, content: JSON.stringify(result.review, null, 2) };
+          result.preview = previewPage(result, result.imageDataUrl);
+        }
+        entry.job = { id, status: "completed", result };
       } catch (error) {
         entry.job = { id, status: "failed", error: message(error) };
       } finally {
@@ -144,7 +173,17 @@ export class Jobs {
       progress("Reading text…");
       const words = await recognizeWords(this.engine, image.pixels, progress);
       const session: Session = { input, image, words, readings: [], decisions: new Map(), edited: new Set() };
+      if (!this.usesVision) session.layoutNote = "the vision model is off";
+      else if (!this.vision.detectLayout) session.layoutNote = `${this.vision.name} doesn't detect layouts`;
       if (this.usesVision) {
+        if (this.vision.detectLayout && input.kind !== "diagram" && !input.transcript?.trim()) {
+          progress("Detecting interface layout...");
+          try { session.layout = await this.vision.detectLayout(image.pixels); }
+          catch (error) {
+            session.visionError = `Layout detection: ${message(error)}`;
+            session.layoutNote = `layout detection failed: ${message(error)}`;
+          }
+        }
         progress("Checking with the vision model…");
         const first = convert({ ...input, pixels: image.pixels, animated: image.animated, words });
         const regions = first.model.regions.filter((r) => r.lines.length).map(({ id, box }) => ({ id, box }));

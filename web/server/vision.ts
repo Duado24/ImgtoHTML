@@ -1,3 +1,4 @@
+import { APPLICATIONS, COMPONENTS, checkLayout, fromNormalized, type LayoutAttempt, type LayoutDetection } from "../src/core/vision-layout";
 import sharp from "sharp";
 import { cropPixels } from "../src/core/preprocess";
 import type { Box, Pixels } from "../src/core/types";
@@ -14,6 +15,8 @@ export interface VisionRegion {
 export interface VisionModel {
   /** Short name shown in the review, e.g. "qwen3-vl:8b-instruct-q4_K_M". */
   readonly name: string;
+  /** The interface's component tree, with every answer the model gave. */
+  detectLayout?(image: Pixels): Promise<LayoutDetection>;
   /** `focus`: one region the reviewer asked to re-read closely, with an optional hint. */
   analyze(image: Pixels, regions: readonly VisionRegion[], focus?: { hint?: string }): Promise<RegionReading[]>;
   /** Diagrams only: parts and connections, for a text description. */
@@ -107,6 +110,48 @@ export class OllamaVisionModel implements VisionModel {
     if (!response.ok) throw new Error(`Ollama ${response.status}: ${await response.text()}`);
     const body = (await response.json()) as { message?: { content?: string } };
     return JSON.parse(body.message?.content ?? "{}") as Record<string, unknown>;
+  }
+
+  async detectLayout(image: Pixels): Promise<LayoutDetection> {
+    const box = { x: 0, y: 0, width: image.width, height: image.height };
+    const schema = { type: "object", properties: {
+      application: { type: "string", enum: [...APPLICATIONS] },
+      components: { type: "array", items: { type: "object", properties: {
+        id: { type: "string" }, type: { type: "string", enum: [...COMPONENTS] },
+        parent: { type: ["string", "null"] },
+        box: { type: "object", properties: { x: { type: "number" }, y: { type: "number" }, width: { type: "number" }, height: { type: "number" } }, required: ["x", "y", "width", "height"] },
+      }, required: ["id", "type", "parent", "box"] } },
+    }, required: ["application", "components"] };
+    const prompt =
+      "Identify the application and visible interface structure. " +
+      "Coordinates are relative, from 0 to 1000 across the image's width and height: (0,0) is the top-left corner, (1000,1000) the bottom-right. " +
+      "Return a tree of non-overlapping sibling rectangles with unique IDs and parent IDs (null for roots). " +
+      "Include sidebar, editor, tabs, breadcrumbs, code, menus, toolbars and terminal panes where visible. " +
+      "Children must fit inside parents. Cover the whole image. Do not transcribe or invent text. " +
+      "An IDE with an Explorer/sidebar and editor tabs is ide, even when it contains a terminal. " +
+      "A standalone code editor is code-editor; a shell alone is terminal. Distinguish websites and other desktop applications. " +
+      "Editor tabs must be children of the editor container, followed by breadcrumbs, then code. These sibling regions must not overlap.";
+    const png = await this.png(image, box, false);
+    const attempts: LayoutAttempt[] = [];
+    const attempt = async (content: string) => {
+      let output: unknown;
+      try {
+        output = await this.ask(content, png, schema);
+      } catch (error) {
+        const problem = `no usable answer: ${error instanceof Error ? error.message : String(error)}`;
+        attempts.push({ output: null, problem });
+        return { layout: null, problem };
+      }
+      const { layout, problem } = checkLayout(fromNormalized(output, image.width, image.height), image.width, image.height);
+      attempts.push({ output, problem });
+      return { layout, problem };
+    };
+    let { layout, problem } = await attempt(prompt);
+    // The problem alone, not the previous answer: a long answer repeated
+    // back can overflow the model's context and cut the retry short.
+    if (!layout) ({ layout } = await attempt(prompt + ` Your previous answer was invalid (${problem}). ` +
+      "Repair the hierarchy and rectangles. No overlapping siblings. Children inside their parents. Tabs belong INSIDE editor, not beside it. Breadcrumbs begin BELOW tabs; code begins BELOW breadcrumbs."));
+    return { layout, attempts };
   }
 
   async describeDiagram(image: Pixels): Promise<Diagram> {

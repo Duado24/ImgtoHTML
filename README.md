@@ -111,8 +111,10 @@ architecture and parity coverage.
     tests/             Python reference tests
     docs/              Historical Python documentation
 
-VisionModel and NullVisionModel are extension points only. There is no
-Ollama integration or region-review loop in this migration.
+The existing Ollama vision model also detects application layout before rendering.
+OCR remains the text source; vision readings provide review alternatives. See
+[web/README.md](web/README.md#vision-layout-reconstruction) for browser validation
+and the VS Code regression workflow.
 
 ## Python reference
 

@@ -24,11 +24,41 @@ open_browser() {
   fi
 }
 
-# Already running? Just open it.
+# Build when the code changed since the last build.
+build_if_changed() {
+  if [[ ! -f dist-server/index.js || ! -f dist/index.html ]] ||
+     [[ -n "$(find src server index.html package.json -newer dist-server/index.js -print -quit)" ]]; then
+    say "Building the app…"
+    npm run build --silent
+  fi
+}
+# Same ID the server reports at /api/version (server/build.ts).
+build_id() { sha256sum dist-server/index.js | cut -c1-12; }
+
+# Already running? Open it if it runs the current build; otherwise restart it,
+# since a running server keeps the code it started with.
 if up "$URL"; then
-  say "ImgtoHTML is already running at $URL"
-  open_browser
-  exit 0
+  build_if_changed
+  running="$(curl -fs -m 2 "$URL/api/version" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p' || true)"
+  if [[ "$running" == "$(build_id)" ]]; then
+    say "ImgtoHTML is already running at $URL"
+    open_browser
+    exit 0
+  fi
+  old=""
+  for pid in $(pgrep -f 'node dist-server/index.js' || true); do
+    [[ "$(readlink "/proc/$pid/cwd")" == "$PWD" ]] && old="$pid"
+  done
+  if [[ -z "$old" ]]; then
+    warn "Something else is using $URL (build ${running:-unknown}, current $(build_id)). Stop it and run this again."
+    exit 1
+  fi
+  warn "The running server is out of date (build ${running:-unknown}, current $(build_id)). Restarting it…"
+  kill "$old"
+  for _ in $(seq 30); do up "$URL" || break; sleep 0.5; done
+  up "$URL" && { warn "The old server didn't stop (pid $old)."; exit 1; }
+  # Its launcher stops the Ollama it started; let that finish before checking Ollama.
+  sleep 2
 fi
 
 # Requirements
@@ -63,12 +93,7 @@ if [[ "${IMGTOHTML_VISION:-}" != off ]] && ! curl -fs -m 2 "$OLLAMA_URL/api/tags
   warn "Model $MODEL isn't downloaded. Get it once with:  ollama pull $MODEL   (OCR only until then)"
 fi
 
-# Build when the code changed since the last build.
-if [[ ! -f dist-server/index.js || ! -f dist/index.html ]] ||
-   [[ -n "$(find src server index.html package.json -newer dist-server/index.js -print -quit)" ]]; then
-  say "Building the app…"
-  npm run build --silent
-fi
+build_if_changed
 
 # Stop what this script started, when the app stops (Ctrl+C).
 cleanup() {
