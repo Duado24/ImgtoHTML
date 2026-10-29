@@ -68,6 +68,13 @@ const input = $<HTMLInputElement>("file");
 
 function setFile(f: File | undefined) {
   if (!f || go.disabled) return;
+  file = null;
+  input.value = "";
+  $("fname").textContent = "Drop a screenshot or GIF";
+  $("fmeta").textContent = "No file selected";
+  const previous = $<HTMLImageElement>("orig");
+  if (previous.src.startsWith("blob:")) URL.revokeObjectURL(previous.src);
+  previous.removeAttribute("src");
   const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
   if (!(SUPPORTED as readonly string[]).includes(ext)) {
     say("Unsupported image format. Use PNG, JPG, GIF, WEBP, BMP, or TIFF.", true);
@@ -346,19 +353,31 @@ document.querySelectorAll<HTMLInputElement>('input[name="width"]').forEach((r) =
 
 /* ── Copy ───────────────────────────────────────── */
 $("copy").onclick = async () => {
+  let copied = false;
   try {
     await navigator.clipboard.writeText(lastHTML);
+    copied = true;
   } catch {
     const t = document.createElement("textarea");
     t.value = lastHTML;
     document.body.appendChild(t);
-    t.select();
-    document.execCommand("copy");
-    t.remove();
+    try {
+      t.select();
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    } finally {
+      t.remove();
+    }
   }
-  // A warning, not a block: unreviewed regions may still hold OCR mistakes.
-  const left = current ? toReview(current).length : 0;
-  $("copy-text").textContent = left ? `Copied — ${left} not reviewed` : "Copied ✓";
+  if (!copied) {
+    $("copy-text").textContent = "Copy failed";
+    say("Could not copy HTML. Select the HTML and copy it manually.", true);
+    return;
+  }
+  const counts = current ? reviewCounts(current.model.regions) : { pending: 0, skipped: 0 };
+  const left = counts.pending + counts.skipped;
+  $("copy-text").textContent = left ? `Copied - ${left} unverified` : "Copied";
   setTimeout(() => ($("copy-text").textContent = "Copy HTML"), left ? 3200 : 1600);
 };
 
