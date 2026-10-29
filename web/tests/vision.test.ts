@@ -64,6 +64,24 @@ describe("lookalike corrections", () => {
     const fixes = lookalikeFixes(mergeVision(unsure, [{ regionId: "r1", role: "text", text: "HTML" }]));
     expect(fixes).toEqual([{ box: expect.any(Object), from: "HIML", to: "HTML" }]);
   });
+
+  it("does not complete text beyond a screenshot edge or automatically change its last word", () => {
+    const boundary = word("Nod", 0, 0);
+    const clipped = buildModel(300, 40, "code", { kind: "leaf", box: { x: 0, y: 0, width: 300, height: 40 }, background: [0, 0, 0], words: [boundary] }, [boundary]);
+    const region = clipped.regions[0]!;
+    const span = region.lines[0]!.spans[0]!;
+    span.confidence = 0.5;
+    region.flags.push({ reason: "cut-off", spanId: span.id, detail: "This line was cut off in the screenshot." });
+    region.review = "pending";
+    for (const completion of ["Node", "Nod."]) {
+      const merged = mergeVision(clipped, [{ regionId: "r1", role: "code", text: completion }]);
+      expect(merged.regions[0]!.lines[0]!.spans[0]!.alternatives).toEqual([]);
+      expect(lookalikeFixes(merged)).toEqual([]);
+    }
+    const corrected = mergeVision(clipped, [{ regionId: "r1", role: "code", text: "N0d" }]);
+    expect(corrected.regions[0]!.lines[0]!.spans[0]!.alternatives).toEqual([{ source: "vision", text: "N0d", confidence: null }]);
+    expect(lookalikeFixes(corrected)).toEqual([]);
+  });
 });
 
 describe("lookalike words on lines that don't line up", () => {

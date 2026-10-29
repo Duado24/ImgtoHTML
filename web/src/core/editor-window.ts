@@ -1,6 +1,6 @@
 /** A code screenshot drawn as the editor window it came from: Explorer
  *  sidebar, tab bar, breadcrumb, line numbers and code, in VS Code's dark
- *  colors. Built from what OCR read in each panel, with a table and inline
+ *  colors. Built from what OCR read in each panel, with flex rows and inline
  *  styles only, so Canvas keeps it. The window parts are hidden from screen
  *  readers; they read the code. */
 
@@ -88,14 +88,14 @@ function sidebarCell(lines: readonly string[]): string {
   const rows = items.map((item) => {
     const mark = item.kind === "open" ? "⌄" : item.kind === "closed" ? "›" : "&nbsp;";
     const guide = item.depth > 0 ? `border-left:1px solid ${C.line};` : "";
-    return `          <div style="padding:0 8px 0 ${8 + item.depth * 12}px;${guide}white-space:nowrap;overflow:hidden;">` +
+    return `          <div style="padding:0 8px 0 ${8 + item.depth * 12}px;${guide}white-space:pre-wrap;overflow-wrap:anywhere;">` +
       `<span style="display:inline-block;width:14px;color:#aaaaaa;">${mark}</span>${escapeHtml(item.name)}</div>`;
   });
   return (
-    `      <td aria-hidden="true" style="width:28%;background-color:${C.sidebar};border-right:1px solid ${C.line};vertical-align:top;padding:0;">\n` +
+    `      <div aria-hidden="true" style="flex:0 1 150px;min-width:135px;box-sizing:border-box;background-color:${C.sidebar};border-right:1px solid ${C.line};padding:0;">\n` +
     `        <div style="padding:7px 10px;${UI}color:#e1e1e1;">${escapeHtml(title)}<span style="float:right;color:#a0a0a0;">•••</span></div>\n` +
     `        <div style="padding:2px 0 10px;${UI}line-height:1.85;color:${C.text};">\n${rows.join("\n")}\n        </div>\n` +
-    "      </td>\n"
+    "      </div>\n"
   );
 }
 
@@ -105,32 +105,32 @@ function headerHtml(header: readonly string[]): string {
   let html = "";
   if (tabsLine) {
     const tabs = parseTabs(tabsLine).map((t) =>
-      `<div style="padding:7px 12px;border-right:1px solid ${C.line};` +
+      `<div style="min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;padding:7px 12px;border-right:1px solid ${C.line};` +
       (t.active ? `background-color:${C.editor};color:#eeeeee;border-top:1px solid #777777;"` : `color:${C.muted};"`) +
       `>${fileIcon(t.name)}&nbsp;&nbsp;${t.active ? `<em>${escapeHtml(t.name)}</em>&nbsp;&nbsp;×` : escapeHtml(t.name)}</div>`,
     );
-    html += `        <div aria-hidden="true" style="display:flex;background-color:${C.sidebar};border-bottom:1px solid ${C.line};${UI}white-space:nowrap;overflow:hidden;">${tabs.join("")}</div>\n`;
+    html += `        <div aria-hidden="true" style="display:flex;flex-wrap:wrap;min-width:0;background-color:${C.sidebar};border-bottom:1px solid ${C.line};${UI}">${tabs.join("")}</div>\n`;
   }
   if (crumbsLine) {
     const crumbs = parseCrumbs(crumbsLine).map((c) => (/json$/i.test(c) ? `${fileIcon(c)}&nbsp;${escapeHtml(c)}` : escapeHtml(c)));
-    html += `        <div aria-hidden="true" style="padding:4px 14px;${UI}color:#b0b0b0;">${crumbs.join("&nbsp;&nbsp;›&nbsp;&nbsp;")}</div>\n`;
+    html += `        <div aria-hidden="true" style="padding:4px 14px;white-space:pre-wrap;overflow-wrap:anywhere;${UI}color:#b0b0b0;">${crumbs.join("&nbsp;&nbsp;›&nbsp;&nbsp;")}</div>\n`;
   }
   return html;
 }
 
 /** `backgrounds`: per code line, a background that differs from the panel's
  *  (the current line, a selection), or undefined. */
-export function codeRows(lines: readonly PaintedLine[], hints: readonly EditorHint[], firstLine: number, inherited: string, decorateHints = true, gutterWidth = 40, gutterPadding = 14, backgrounds: readonly (string | undefined)[] = []): string {
-  const number = (n: string) => `<td aria-hidden="true" style="width:${gutterWidth}px;text-align:right;padding:0 ${gutterPadding}px 0 0;color:${decorateHints ? C.muted : inherited};border:none;vertical-align:top;">${n}</td>`;
+export function codeRows(lines: readonly PaintedLine[], hints: readonly EditorHint[], firstLine: number, inherited: string, decorateHints = true, gutterWidth = 38, gutterPadding = 14, backgrounds: readonly (string | undefined)[] = []): string {
+  const number = (n: string) => `<div aria-hidden="true" style="flex:0 0 ${gutterWidth}px;box-sizing:border-box;text-align:right;padding:0 ${gutterPadding}px 0 0;color:${decorateHints ? C.muted : inherited};">${n}</div>`;
   const rows: string[] = [];
   lines.forEach((line, i) => {
     for (const hint of hints.filter((h) => h.before === i)) {
-      rows.push(`          <tr aria-hidden="true">${number("")}<td style="padding:0;border:none;${UI}font-size:11px;color:${decorateHints ? "#a9a9a9" : inherited};">${decorateHints ? "▷ " : ""}${escapeHtml(decorateHints ? hint.text.replace(/^[\u25b7>D]\s*(?=Debug)/, "") : hint.text)}</td></tr>`);
+      rows.push(`          <div aria-hidden="true" style="display:flex;min-width:0;">${number("")}<div style="flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;${UI}font-size:11px;color:${decorateHints ? "#a9a9a9" : inherited};">${decorateHints ? "▷ " : ""}${escapeHtml(decorateHints ? hint.text.replace(/^[\u25b7>D]\s*(?=Debug)/, "") : hint.text)}</div></div>`);
     }
     const body = lineText(line)
       ? line.runs.map((r) => (r.color && rgbHex(r.color) !== inherited ? `<span style="color:${rgbHex(r.color)};">${escapeHtml(r.text)}</span>` : escapeHtml(r.text))).join("")
       : "";
-    rows.push(`          <tr${backgrounds[i] ? ` style="background-color:${backgrounds[i]};"` : ""}>${number(String(firstLine + i))}<td style="padding:0;border:none;white-space:pre;">${body}</td></tr>`);
+    rows.push(`          <div style="display:flex;min-width:0;${backgrounds[i] ? `background-color:${backgrounds[i]};` : ""}">${number(String(firstLine + i))}<div style="flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;">${body || "<br>"}</div></div>`);
   });
   return rows.join("\n");
 }
@@ -138,18 +138,14 @@ export function codeRows(lines: readonly PaintedLine[], hints: readonly EditorHi
 /** The whole window as a Canvas fragment. */
 export function renderEditorWindow(lines: readonly PaintedLine[], window: EditorWindow, text: string, label: string, caption?: string | null): string {
   const code =
-    `        <div style="overflow:hidden;padding:4px 0 14px;">\n` +
-    `        <table style="border-collapse:collapse;border:none;width:100%;font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.5;color:${text};">\n` +
-    `          <tbody>\n${codeRows(lines, window.hints, window.firstLine, text)}\n          </tbody>\n        </table>\n        </div>\n`;
+    `        <div style="min-width:0;padding:4px 0 14px;font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.5;color:${text};">\n` +
+    `${codeRows(lines, window.hints, window.firstLine, text)}\n        </div>\n`;
   const editorCell =
-    `      <td style="vertical-align:top;padding:0;background-color:${C.editor};">\n${headerHtml(window.header)}${code}      </td>\n`;
-  // Fits any page width with no scrollbar: columns shrink, long lines are cut
-  // off at the panel edge, as in a screenshot.
+    `      <div style="flex:1 1 520px;min-width:280px;max-width:100%;padding:0;background-color:${C.editor};">\n${headerHtml(window.header)}${code}      </div>\n`;
   return (
     `<div role="figure" aria-label="${escapeHtml(label)}" style="max-width:100%;min-width:0;margin:0;">\n` +
-    `  <div style="width:100%;overflow:hidden;border:1px solid #333333;background-color:${C.editor};color:${text};">\n` +
-    `  <table style="border-collapse:collapse;width:100%;table-layout:fixed;border:none;">\n` +
-    `    <tbody>\n      <tr>\n${window.sidebar ? sidebarCell(window.sidebar) : ""}${editorCell}      </tr>\n    </tbody>\n  </table>\n  </div>` +
+    `  <div style="display:flex;flex-wrap:wrap;width:100%;box-sizing:border-box;overflow:hidden;border:1px solid #2b2b2b;border-radius:0.75rem;background-color:${C.editor};color:${text};">\n` +
+    `${window.sidebar ? sidebarCell(window.sidebar) : ""}${editorCell}  </div>` +
     (caption ? `\n  <p style="margin:10px 0 0;padding:0;color:#202124;font:14px/1.5 Arial,sans-serif;">${escapeHtml(caption)}</p>` : "") +
     "\n</div>"
   );

@@ -68,7 +68,8 @@ async function result(app: App, id: string): Promise<JobResult> {
 describe("local conversion API / Python parity", () => {
   it("returns a job id, masks identities, preserves review fields and all four file names", async () => {
     const { app, png } = await setup();
-    const output = await result(app, await submit(app, png, { kind: "terminal", label: "  ", caption: "  " }));
+    const id = await submit(app, png, { kind: "terminal", label: "  ", caption: "  " });
+    const output = await result(app, id);
     expect(output.transcript).toContain("/home/username/app");
     expect(output.transcript).toContain("username@example.edu");
     expect(JSON.stringify(output.review)).not.toContain("alice");
@@ -93,6 +94,8 @@ describe("local conversion API / Python parity", () => {
     expect(output.html).not.toMatch(/<(style|script|pre)\b/i);
     expect(output.html).not.toMatch(/\b(class|src)=/);
     expect(output.html.match(/<div style="white-space:/g)).toHaveLength(output.lineCount);
+    const reviewed = (await app.inject({ method: "POST", url: `/api/jobs/${id}/decide`, payload: { region: "all", state: "approved" } })).json<Job>();
+    expect(reviewed.status === "completed" && reviewed.result.lowConfidenceCount).toBe(0);
   });
 
   it("uses corrected text but still runs OCR to measure colors", async () => {

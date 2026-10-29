@@ -9,6 +9,7 @@ import type { Job, JobResult } from "../src/shared/api";
 import { issuesFor } from "../src/core/convert";
 import type { OcrWord } from "../src/core/types";
 import { FakeImage } from "./image";
+import { checklistSummary } from "../src/browser/review-status";
 
 type App = Awaited<ReturnType<typeof createApp>>;
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -76,6 +77,10 @@ describe("review actions", () => {
     expect(saved).toMatchObject({ file: "a.png", span: span.id, ocr: "wor1d", user: "world" });
     const approved = (await post(app, id, "decide", { region: "r1", state: "approved" })).json<Job>();
     expect(approved.status === "completed" && approved.result.model.regions[0]!.review).toBe("corrected");
+    if (approved.status !== "completed") throw new Error("Expected the saved correction");
+    expect(approved.result.model.regions[0]!.flags).toEqual([]);
+    expect(checklistSummary(approved.result.model)).toMatchObject({ words: 0, total: 1, checked: 1, percent: 100, heading: "Ready to paste" });
+    expect(JSON.parse(approved.result.modelFile.content).regions[0].reviewRequested).toBe(true);
   });
 
   it("skips every waiting region at once", async () => {

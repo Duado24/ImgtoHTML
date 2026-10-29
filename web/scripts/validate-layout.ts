@@ -27,22 +27,15 @@ try {
   const words = await recognizeWords(engine, decoded.pixels);
   const result = convert({ fileName: 'vscode.png', pixels: decoded.pixels, words, kind: 'terminal', animated: false, layout });
   await mkdir('eval-results/layout', { recursive: true });
-  const { chromium } = await import('@playwright/test');
-  const browser = await chromium.launch();
-  try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-    await page.setContent(`<body style="margin:0">${result.html}</body>`);
-    const responsive = await page.evaluate(() => document.documentElement.scrollWidth <= 390);
-    if (!responsive) throw new Error('Layout overflows the narrow host page');
-  } finally { await browser.close(); }
   const report = await validateVisual(result.html, image, result.review.layout ?? layout, 1033, 367, 'eval-results/layout/vscode.png');
   await writeFile('eval-results/layout/vscode.html', report.html);
   await writeFile('eval-results/layout/report.json', JSON.stringify({ ...report, html: undefined, canvasIssues: checkCanvasSafe(report.html) }, null, 2));
-  if (process.argv.includes('--live')) { console.log(JSON.stringify({ layout: result.review.layout, discrepancies: report.discrepancies }, null, 2)); process.exitCode = report.discrepancies.length ? 1 : 0; }
-  // Deliberately damage columns to exercise automatic structural repair.
-  let column = 0;
-  const broken = result.html.replace(/(<td style="width:)[0-9.]+%;/g, (_, prefix: string) => `${prefix}${column++ === 0 ? 5 : 95}%;`);
+  if (process.argv.includes('--live')) console.log(JSON.stringify({ layout: result.review.layout, discrepancies: report.discrepancies }, null, 2));
+  // Deliberately damage flex sizing to exercise automatic structural repair.
+  const broken = result.html.replace('flex:0 1 150px;min-width:135px;', 'flex:0 1 5px;min-width:0;');
   const recovery = await validateVisual(broken, image, layout, 1033, 367);
-  console.log(JSON.stringify({ discrepancies: report.discrepancies, pixelMeanAbsoluteError: report.pixelMeanAbsoluteError, canvasIssues: checkCanvasSafe(report.html), repairedDamagedColumns: recovery.repaired }, null, 2));
-  if (report.discrepancies.length || checkCanvasSafe(report.html).length || (!process.argv.includes('--live') && !recovery.repaired)) process.exitCode = 1;
+  console.log(JSON.stringify({ discrepancies: report.discrepancies, responsive: report.responsive, pixelMeanAbsoluteError: report.pixelMeanAbsoluteError, canvasIssues: checkCanvasSafe(report.html), repairedDamagedColumns: recovery.repaired }, null, 2));
+  // Source geometry is diagnostic: a narrow Explorer and wrapped text
+  // deliberately differ from the screenshot's fixed pixel rectangles.
+  if (report.responsive.some((r) => r.horizontalOverflow || r.clippedText.length) || checkCanvasSafe(report.html).length || (!process.argv.includes('--live') && !recovery.repaired)) process.exitCode = 1;
 } finally { await engine.close(); }

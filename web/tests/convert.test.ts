@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { convert, issuesFor, previewPage, splitName } from "../src/core/convert";
+import { applyDecisions, convert, issuesFor, previewPage, splitName } from "../src/core/convert";
+import { checkCanvasSafe } from "../src/core/canvas";
+import { KINDS } from "../src/core/types";
 import type { OcrWord, RGB } from "../src/core/types";
 import { FakeImage } from "./image";
 
@@ -55,6 +57,62 @@ describe("convert", () => {
     expect(result.html).toContain('aria-label="Terminal output"');
     expect(result.lowConfidenceCount).toBe(1);
     expect(JSON.parse(result.reviewFile.content)).toEqual(result.review);
+  });
+
+  it.each(KINDS)("renders %s screenshots without table markup", (kind) => {
+    const { pixels, words } = editor();
+    for (const transcript of [undefined, "A very long line: " + "word".repeat(100)]) {
+      const result = convert({ fileName: "a.png", pixels, words, animated: false, kind, transcript });
+      expect(result.html).not.toMatch(/<(?:table|thead|tbody|tfoot|tr|th|td)\b/i);
+      expect(checkCanvasSafe(result.html)).toEqual([]);
+      expect(result.html).not.toContain("white-space:pre;");
+    }
+  });
+
+  it("renders an empty code screenshot without inventing text", () => {
+    const result = convert({ fileName: "empty.png", pixels: new FakeImage(400, 100, DARK), words: [], animated: false, kind: "code" });
+    expect(result.transcript).toBe("");
+    expect(result.review.cut_off_lines).toBeUndefined();
+    expect(result.lowConfidenceCount).toBe(0);
+  });
+
+  it("counts doubtful words in unchecked regions and reaches zero when reviewed", () => {
+    const { pixels, words } = terminal();
+    const result = convert({ fileName: "a.png", pixels, words, animated: false, kind: "terminal" });
+    expect(result.lowConfidenceCount).toBe(1);
+    for (const state of ["approved", "corrected", "skipped"] as const) {
+      const checked = applyDecisions(result, new Map([["r1", state]]));
+      expect(checked.lowConfidenceCount).toBe(0);
+      expect(checked.review.regions_to_review).toEqual([]);
+    }
+    const pending = applyDecisions(applyDecisions(result, new Map([["r1", "approved"]])), new Map([["r1", "pending"]]));
+    expect(pending.lowConfidenceCount).toBe(1);
+  });
+
+  it("marks code cut off at the screenshot edge without inventing its ending", () => {
+    const pixels = new FakeImage(400, 140, DARK);
+    const words = [
+      word("1", 8, 10, 8, 99, 1), word("{", 46, 10, 8, 99, 1),
+      word("2", 8, 30, 8, 99, 2), word('"description":', 46, 30, 104, 99, 2), word('"TypeScript client and Nod', 158, 30, 240, 99, 2),
+      word("3", 8, 50, 8, 99, 3), word('"type":', 46, 50, 56, 99, 3), word('"module",', 110, 50, 72, 99, 3),
+      word("4", 8, 70, 8, 99, 4), word("}", 46, 70, 8, 99, 4),
+    ];
+    const result = convert({ fileName: "cutoff.png", pixels, words, animated: false, kind: "code" });
+    expect(result.html).toContain("TypeScript client and Nod…");
+    expect(result.transcript).toContain("TypeScript client and Nod…");
+    expect(result.html).not.toContain("Node");
+    expect(result.review.cut_off_lines).toEqual([expect.objectContaining({ line: 2, text: expect.stringContaining("Nod") })]);
+    expect(result.model.regions.flatMap((r) => r.flags)).toContainEqual(expect.objectContaining({ reason: "cut-off", detail: "This line was cut off in the screenshot." }));
+  });
+
+  it("still finds cut-off code when OCR misreads a gutter number and includes a hint", () => {
+    const pixels = new FakeImage(400, 180, DARK);
+    const raw = ["1    {", '2      "name": "web",', 'Bf     "description": "Nod', '4      "type": "module",', "Debug", '5      "private": true', "6    }"];
+    const words = raw.map((text, i) => word(text, 8, 10 + i * 20, i === 2 ? 390 : text.length * 8, 99, i));
+    const result = convert({ fileName: "cutoff.png", pixels, words, animated: false, kind: "code" });
+    expect(result.review.code?.line_numbers_removed).toBe(true);
+    expect(result.transcript).toContain('"description": "Nod…');
+    expect(result.review.cut_off_lines).toEqual([expect.objectContaining({ line: 3 })]);
   });
 
   it("keeps the screenshot's own background and text colors outside the course theme", () => {

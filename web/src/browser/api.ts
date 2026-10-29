@@ -1,5 +1,7 @@
 import type { Kind } from "../core/types";
-import type { Job, JobResult } from "../shared/api";
+import type { Job, JobProgress, JobResult } from "../shared/api";
+
+export type ProgressCallback = (text: string, details?: JobProgress) => void;
 
 export interface ConversionOptions {
   kind: Kind;
@@ -24,7 +26,7 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
 export async function convertOnServer(
   file: File,
   options: ConversionOptions,
-  progress: (text: string) => void,
+  progress: ProgressCallback,
   onJob?: (id: string) => void,
 ): Promise<JobResult> {
   const form = new FormData();
@@ -34,7 +36,7 @@ export async function convertOnServer(
   form.append("caption", options.caption);
   if (options.transcript !== undefined) form.append("transcript", options.transcript);
   if (options.editorWindow === false) form.append("window", "off");
-  progress("Opening the image…");
+  progress("Opening the image…", { progress: "Opening the image…", percent: 0, stage: "queued", step: 0, totalSteps: 5 });
   const { id } = await json<{ id: string }>("/api/convert", { method: "POST", body: form });
   onJob?.(id);
   return waitFor(id, progress);
@@ -68,18 +70,22 @@ export async function editSpan(id: string, span: string, text: string): Promise<
 }
 
 /** Read one region again, enlarged, with an optional hint for the vision model. */
-export async function retryRegion(id: string, region: string, hint: string, progress: (text: string) => void, onQueued?: () => void): Promise<JobResult> {
+export async function retryRegion(id: string, region: string, hint: string, progress: ProgressCallback, onQueued?: () => void): Promise<JobResult> {
+  progress("Waiting for the text reader…", { progress: "Waiting for the text reader…", percent: 0, stage: "queued", step: 0, totalSteps: 5 });
   await post(id, "retry", hint ? { region, hint } : { region });
   onQueued?.();
   return waitFor(id, progress);
 }
 
-async function waitFor(id: string, progress: (text: string) => void): Promise<JobResult> {
+async function waitFor(id: string, progress: ProgressCallback): Promise<JobResult> {
   for (;;) {
     const job = await json<Job>(`/api/jobs/${encodeURIComponent(id)}`);
-    if (job.status === "completed") return job.result;
+    if (job.status === "completed") {
+      progress("Ready to review", { progress: "Ready to review", percent: 100, stage: "validate", step: 5, totalSteps: 5 });
+      return job.result;
+    }
     if (job.status === "failed") throw new Error(job.error);
-    progress(job.progress);
+    progress(job.progress, job);
     await new Promise<void>((resolve) => setTimeout(resolve, 350));
   }
 }

@@ -30,6 +30,7 @@ import { decodeImage } from "../server/image";
 import { Jobs } from "../server/jobs";
 import { LocalOcr } from "../server/ocr";
 import { OllamaVisionModel, type VisionModel, type VisionRegion } from "../server/vision";
+import { cutOffTokens, withoutCutOffAnnotations } from "./eval-text";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURES = join(ROOT, "fixtures");
@@ -54,6 +55,8 @@ interface Entry {
   canvasErrors: string[];
   canvasWarnings: string[];
   text: TextScore | null;
+  /** Text scores exclude only explicitly recorded visual cutoff annotations. */
+  cutOffAnnotations?: number;
   /** Layouts: the component whose text best matches the .txt (which may cover only the code). */
   textFrom?: string;
   renderer?: string;
@@ -110,6 +113,7 @@ function supportedWords(result: ConvertResult): string[] {
   return [
     ...result.model.regions.flatMap((r) => r.lines.flatMap((l) => l.spans.map((s) => s.text))),
     ...(result.review.vision?.corrected ?? []).map((c) => c.to),
+    ...cutOffTokens(result.review.cut_off_lines),
     result.caption ?? "",
   ];
 }
@@ -191,10 +195,11 @@ try {
     await writeFile(join(RESULTS, "preview", file.replace(/\//g, "__") + ".html"), result.preview.content);
     const issues = result.review.canvas_issues;
     // A layout's .txt may cover one component (the code): score the best match.
-    let text = expected === null ? null : scoreText(expected, result.transcript);
+    const scoreContent = (text: string) => withoutCutOffAnnotations(text, result.review.cut_off_lines);
+    let text = expected === null ? null : scoreText(expected, scoreContent(result.transcript));
     let textFrom = "transcript";
     for (const s of expected === null ? [] : result.sections ?? []) {
-      const score = scoreText(expected!, s.lines.join("\n"));
+      const score = scoreText(expected!, scoreContent(s.lines.join("\n")));
       if (score.cerIgnoringSpaces < text!.cerIgnoringSpaces) [text, textFrom] = [score, s.component];
     }
     entries.push({
@@ -208,6 +213,7 @@ try {
       canvasErrors: issues.filter((i) => i.level === "error").map((i) => i.message),
       canvasWarnings: issues.filter((i) => i.level === "warning").map((i) => i.message),
       text,
+      cutOffAnnotations: cutOffTokens(result.review.cut_off_lines).length,
       textFrom,
       renderer: result.review.layout_status.renderer,
       layoutReason: result.review.layout_status.reason,
@@ -282,6 +288,8 @@ const marked = entries.filter((e) => e.layout);
 if (marked.length) console.log(`Layout overlap with marked boxes, mean over ${marked.length}: ${pct(marked.reduce((s, e) => s + e.layout!.meanIoU, 0) / marked.length)}`);
 const madeUp = entries.filter((e) => e.unsupported?.length);
 console.log(`Made-up words: ${madeUp.reduce((s, e) => s + e.unsupported!.length, 0)} in ${madeUp.length} of ${entries.length} screenshots`);
+const annotations = entries.reduce((sum, entry) => sum + (entry.cutOffAnnotations ?? 0), 0);
+if (annotations) console.log(`Text scoring excludes ${annotations} recorded cutoff markers (…). The observed text and all other ellipses remain checked.`);
 const missing = entries.filter((e) => e.vision === "missing").length;
 if (missing) console.log(`${missing} screenshots ran without some vision answers (Ollama off, none saved).`);
 await writeFile(join(RESULTS, "latest.json"), JSON.stringify(entries, null, 2));

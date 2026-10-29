@@ -8,12 +8,12 @@ import { setImmediate } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { addDiagram, addVision, applyDecisions, convert, previewPage, type ConvertInput, type ConvertResult } from "../src/core/convert";
 import type { Diagram } from "../src/core/diagram";
-import type { ReviewState } from "../src/core/model";
+import { countWordsToCheck, type ReviewState } from "../src/core/model";
 import type { Box, OcrWord } from "../src/core/types";
 import { cropPixels } from "../src/core/preprocess";
 import { lookalikeFixes } from "../src/core/vision";
 import { NullVisionModel, type VisionModel } from "./vision";
-import type { Job, JobResult } from "../src/shared/api";
+import type { Job, JobProgress, JobResult, JobStage } from "../src/shared/api";
 import type { DecodedImage } from "./image";
 import type { OcrEngine } from "./ocr/engine";
 import { recognizeWords, score } from "./ocr/pipeline";
@@ -23,6 +23,18 @@ const TTL = 30 * 60 * 1000;
 const MAX_RESULTS = 20;
 const GRACE = 60_000;
 const DEFAULT_TIMEOUT = 600_000;
+// A stable share for each stage makes OCR's own percentage useful without
+// pretending that waiting on the layout/vision model has measurable progress.
+const STAGES: Record<JobStage, { start: number; end: number; step: number }> = {
+  queued: { start: 0, end: 5, step: 0 },
+  "read-text": { start: 5, end: 55, step: 1 },
+  "detect-layout": { start: 55, end: 65, step: 2 },
+  vision: { start: 65, end: 85, step: 3 },
+  render: { start: 85, end: 95, step: 4 },
+  validate: { start: 95, end: 99, step: 5 },
+};
+const QUEUED: JobProgress = { progress: "Waiting for the text reader…", percent: 0, stage: "queued", step: 0, totalSteps: 5 };
+type Progress = (stage: JobStage, text: string, fraction?: number) => void;
 
 function positiveSetting(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -61,6 +73,8 @@ interface Session {
   decisions: Map<string, ReviewState>;
   /** Regions with a word the reviewer changed (approving them records "corrected"). */
   edited: Set<string>;
+  /** Checklist membership survives edits and focused re-reads. */
+  checklist: Set<string>;
 }
 
 interface Entry {
@@ -228,13 +242,23 @@ export class Jobs {
       result = { ...result, review, reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) } };
     }
     if (session.diagram && !input.transcript?.trim()) result = addDiagram(result, session.diagram);
+    for (const region of result.model.regions) {
+      if (region.flags.length) session.checklist.add(region.id);
+      if (session.checklist.has(region.id)) {
+        region.reviewRequested = true;
+        // Re-reading or fixing a word still leaves the final check to the teacher.
+        if (!input.transcript?.trim()) region.review = "pending";
+      }
+    }
     result = applyDecisions(result, session.decisions);
+    result.lowConfidenceCount = countWordsToCheck(result.model);
+    result.modelFile = { ...result.modelFile, content: JSON.stringify(result.model, null, 2) };
     const imageDataUrl = `data:image/png;base64,${image.png.toString("base64")}`;
     return { ...result, imageDataUrl, preview: previewPage(result, imageDataUrl) };
   }
 
   /** Run work after any queued OCR, showing progress on the job meanwhile. */
-  private queue(id: string, entry: Entry, work: (progress: (text: string) => void, check: () => void) => Promise<void>, release?: () => void) {
+  private queue(id: string, entry: Entry, work: (progress: Progress, check: () => void) => Promise<void>, release?: () => void) {
     let released = false;
     const releaseOnce = () => { if (!released) { released = true; release?.(); } };
     entry.finished = undefined;
@@ -251,16 +275,31 @@ export class Jobs {
       // Let the 202 response and any waiting polls flush before doing CPU work.
       await setImmediate();
       const check = () => this.check(entry);
-      const progress = (text: string) => { check(); entry.job = { id, status: "running", progress: text }; };
+      const progress: Progress = (stage, text, fraction = 0) => {
+        // Engine loggers can call this asynchronously after cancellation.
+        // Leave the terminal result alone; check() enforces the deadline at
+        // each work boundary without throwing from a worker's event callback.
+        if (entry.finished !== undefined || entry.operation !== operation || Date.now() >= operation.deadline) return;
+        const range = STAGES[stage];
+        const previous = entry.job.status === "running" || entry.job.status === "queued" ? entry.job.percent : 0;
+        const percent = Math.max(previous, Math.round(range.start + (range.end - range.start) * Math.max(0, Math.min(1, fraction))));
+        entry.job = { id, status: "running", progress: text, percent, stage, step: range.step, totalSteps: 5 };
+      };
       try {
         check();
         operation.started = true;
         await work(progress, check);
         check();
+        progress("render", "Building your HTML…");
+        await setImmediate();
+        check();
         let result = this.finalize(entry.session!);
         check();
+        progress("validate", "Checking the HTML…");
+        await setImmediate();
+        check();
         if (process.env.IMGTOHTML_VALIDATE_LAYOUT === "1" && result.review.layout) {
-          progress("Validating layout in Chromium...");
+          progress("validate", "Checking the layout in the browser…");
           try {
             const { validateVisual } = await import("./visual-validation");
             check();
@@ -296,20 +335,22 @@ export class Jobs {
   submit(input: Submission, image: DecodedImage, release: () => void): string {
     this.prune();
     const id = randomUUID();
-    const entry: Entry = { session: { input, image, words: [], readings: [], decisions: new Map(), edited: new Set() }, job: { id, status: "queued", progress: "Waiting for the text reader…" } };
+    const entry: Entry = { session: { input, image, words: [], readings: [], decisions: new Map(), edited: new Set(), checklist: new Set() }, job: { id, status: "queued", ...QUEUED } };
     this.entries.set(id, entry);
     this.queue(id, entry, async (progress, check) => {
       const session = entry.session!;
       const { input, image } = session;
-      progress("Reading text…");
-      const words = await recognizeWords(this.checkedEngine(check), image.pixels, progress);
+      progress("read-text", "Reading text…");
+      const words = await recognizeWords(this.checkedEngine(check), image.pixels,
+        (text, percent) => progress("read-text", text, percent / 100));
       check();
       session.words = words;
+      progress("detect-layout", "Finding the layout…");
       if (!this.usesVision) session.layoutNote = "the vision model is off";
       else if (!this.vision.detectLayout) session.layoutNote = `${this.vision.name} doesn't detect layouts`;
       if (this.usesVision) {
         if (this.vision.detectLayout && input.kind !== "diagram" && !input.transcript?.trim()) {
-          progress("Detecting interface layout...");
+          progress("detect-layout", "Finding the layout…");
           try { session.layout = await this.vision.detectLayout(image.pixels); }
           catch (error) {
             session.visionError = `Layout detection: ${message(error)}`;
@@ -317,7 +358,7 @@ export class Jobs {
           }
         }
         check();
-        progress("Checking with the vision model…");
+        progress("vision", "Checking the picture…");
         const first = convert({ ...input, pixels: image.pixels, animated: image.animated, words, layout: session.layout?.layout });
         // With a layout, the vision model reads each component that holds
         // text (sidebar, tab bar, breadcrumb, code…) on its own: a tab bar
@@ -331,7 +372,7 @@ export class Jobs {
           session.readings = await this.readVision(session, regions);
           check();
           if (input.kind === "diagram" && this.vision.describeDiagram) {
-            progress("Describing the diagram…");
+            progress("vision", "Reading the diagram…", 0.5);
             session.diagram = await this.vision.describeDiagram(image.pixels);
           }
         } catch (error) {
@@ -419,13 +460,14 @@ export class Jobs {
     const regionBox = { ...region.box };
     entry.finished = undefined;
     // Show it as running at once, so polling never sees the old result as the new one.
-    entry.job = { id, status: "running", progress: "Waiting for the text reader…" };
+    entry.job = { id, status: "running", ...QUEUED };
     this.queue(id, entry, async (progress, check) => {
       const session = entry.session!;
       const pixels = session.image.pixels;
-      progress(`Reading ${regionId} again…`);
+      progress("read-text", "Reading this part again…");
       const before = session.words.filter((w) => centerIn(w, regionBox));
-      const again = (await recognizeWords(this.checkedEngine(check), cropPixels(pixels, box), progress)).map((w) => ({
+      const again = (await recognizeWords(this.checkedEngine(check), cropPixels(pixels, box),
+        (text, percent) => progress("read-text", text, percent / 100))).map((w) => ({
         ...w,
         x: w.x + box.x,
         y: w.y + box.y,
@@ -435,8 +477,9 @@ export class Jobs {
       if (score(again) > score(before)) {
         session.words = [...session.words.filter((w) => !before.includes(w)), ...again];
       }
+      progress("detect-layout", "Finding this part in the picture…");
       if (this.usesVision) {
-        progress(`Asking the vision model about ${regionId}…`);
+        progress("vision", "Checking this part of the picture…");
         try {
           const [reading] = await this.readVision(session, [{ id: regionId, box: regionBox }], hint ?? "");
           check();
@@ -455,9 +498,9 @@ export class Jobs {
     // OCR and Ollama calls may not be interruptible. Keep the serial worker
     // occupied until they settle, stop at the next boundary, discard late
     // results, and release admission exactly once when the work unwinds.
-    return { recognize: async (input) => {
+    return { recognize: async (input, progress) => {
       check();
-      const words = await this.engine.recognize(input);
+      const words = await this.engine.recognize(input, progress);
       check();
       return words;
     } };

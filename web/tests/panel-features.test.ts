@@ -57,7 +57,7 @@ describe("measured panel features", () => {
     expect(text).not.toContain("...");
     expect(result.model.regions.flatMap((r) => r.lines.flatMap((l) => l.spans)).some((s) => s.text.includes("cropped"))).toBe(true);
     expect(checkCanvasSafe(result.html)).toEqual([]);
-    expect(result.html).toContain('id="layout-editor" style="min-width:0;overflow:hidden;background-color:#181818;');
+    expect(result.html).toContain('id="layout-editor" style="min-width:0;overflow-wrap:anywhere;background-color:#181818;');
   });
 });
 

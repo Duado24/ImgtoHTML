@@ -71,10 +71,31 @@ describe("OCR engines", () => {
     expect(words.map((w) => w.text)).toEqual(["Explorer", "correct"]);
     expect(words[0]).toMatchObject({ x: 10, y: 10, block: 1000 });
     expect(words[1]).toMatchObject({ x: 140, y: 10, block: 0 });
-    expect(progress).toHaveBeenCalledWith("Reading panel 2 of 2…");
+    expect(progress).toHaveBeenCalledWith("Reading panel 2 of 2…", expect.any(Number));
+    expect(progress.mock.calls.at(-1)![1]).toBe(100);
     const panel = recognize.mock.calls[2]![0] as OcrImage;
     const data = await sharp(panel.png).raw().toBuffer();
     expect(data[4 * (40 * panel.width + 40)]).toBe(255);
+  });
+
+  it("uses engine percentages across the initial pass and panel rereads without going backwards", async () => {
+    const pixels = new FakeImage(400, 120, [24, 24, 24]);
+    pixels.fill(120, 0, 120, 119, [43, 43, 43]);
+    pixels.fill(121, 0, 399, 119, [31, 31, 31]);
+    const first = [word("left", 10), word("right", 140)];
+    const recognize = vi.fn(async (_image: OcrImage, report?: (percent: number) => void) => {
+      for (const percent of [0, 65, 25, Number.NaN, 100]) report?.(percent);
+      return first.map(scaled);
+    });
+    const progress = vi.fn();
+    await recognizeWords({ recognize }, pixels, progress);
+    const percentages = progress.mock.calls.map(([, percent]) => percent as number);
+    expect(recognize).toHaveBeenCalledTimes(3);
+    expect(percentages).toContain(26); // Engine's 65% within the initial 40% share.
+    expect(percentages).toContain(59.5); // Engine's 65% within the first panel's share.
+    expect(percentages[0]).toBe(0);
+    expect(percentages.at(-1)).toBe(100);
+    expect(percentages.every((percent, i) => percent >= (percentages[i - 1] ?? 0) && percent <= 100)).toBe(true);
   });
 
   it("defines a vision extension point with no model behavior", async () => {

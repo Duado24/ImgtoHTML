@@ -21,6 +21,13 @@ describe("checkCanvasSafe", () => {
     ]);
   });
 
+  it("rejects every table element, including presentation tables", () => {
+    const html = '<TABLE role="presentation"><caption>Title</caption><colgroup><col></colgroup><thead><tr><th>Name</th></tr></thead><tbody><tr><td>Value</td></tr></tbody><tfoot></tfoot></TABLE>';
+    for (const tag of ["table", "caption", "colgroup", "col", "thead", "tr", "th", "tbody", "td", "tfoot"]) {
+      expect(messages(html)).toContain(`error: <${tag}> is not allowed`);
+    }
+  });
+
   it("rejects event handlers and script URLs", () => {
     expect(messages('<a href="javascript:alert(1)" onclick="x()">x</a>')).toEqual([
       "error: <a> href uses a script or data URL",

@@ -16,14 +16,14 @@ export interface CanvasIssue {
 const FORBIDDEN_ELEMENTS = new Set([
   "script", "style", "link", "meta", "base", "form", "input", "button", "select",
   "textarea", "object", "embed", "applet", "frame", "frameset", "pre",
+  "table", "tbody", "thead", "tfoot", "tr", "td", "th", "caption", "col", "colgroup",
 ]);
 
 const ALLOWED_ELEMENTS = new Set([
-  "a", "abbr", "b", "blockquote", "br", "caption", "cite", "code", "col", "colgroup",
+  "a", "abbr", "b", "blockquote", "br", "cite", "code",
   "dd", "del", "details", "div", "dl", "dt", "em", "figcaption", "figure",
   "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "ins", "kbd", "li", "ol", "p", "q",
-  "s", "samp", "small", "span", "strong", "sub", "summary", "sup", "table", "tbody",
-  "td", "tfoot", "th", "thead", "tr", "u", "ul", "var",
+  "s", "samp", "small", "span", "strong", "sub", "summary", "sup", "u", "ul", "var",
 ]);
 
 const ALLOWED_ATTRIBUTES = new Set([

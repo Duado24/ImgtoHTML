@@ -59,7 +59,7 @@ describe("renderEditorWindow", () => {
     expect(cleaned).toMatchObject({ firstLine: 1, hints: [{ before: 3, text: "Debug" }] });
     expect(repaired).toBe(2);
     expect(lines).toEqual(["{", '  "name": "web",', '  "private": true,', '  "scripts": {', '    "app": "bash start.sh"', "}"]);
-    expect(html).toContain('<td aria-hidden="true" style="width:40px;');
+    expect(html).toContain('<div aria-hidden="true" style="flex:0 0 38px;');
     expect(html).toContain("▷ Debug");
     expect(html).toContain('<span style="color:#9cdcfe;">&quot;name&quot;</span>');
     expect(html).toContain('<span style="color:#ffd700;">{</span>');
@@ -67,7 +67,8 @@ describe("renderEditorWindow", () => {
 
   it("draws sidebar, tabs and breadcrumb hidden from screen readers", () => {
     expect(html).toContain('role="figure" aria-label="VS Code showing package.json"');
-    expect(html).toMatch(/<td aria-hidden="true" style="width:28%;/);
+    expect(html).toContain('<div aria-hidden="true" style="flex:0 1 150px;min-width:135px;');
+    expect(html).toContain('flex:1 1 520px;min-width:280px;');
     expect(html).toContain("<em>packagejson</em>&nbsp;&nbsp;×");
     expect(html).toContain("Preview README.md");
     expect(html).toContain("⌄</span>ImgHtml");
@@ -75,6 +76,8 @@ describe("renderEditorWindow", () => {
 
   it("is Canvas-safe", () => {
     expect(checkCanvasSafe(html)).toEqual([]);
+    expect(html).not.toMatch(/<(?:table|tr|td)\b/i);
+    expect(html).toContain("white-space:pre-wrap;overflow-wrap:anywhere;");
   });
 });
 
@@ -82,8 +85,8 @@ describe("code line backgrounds", () => {
   it("gives a line its own background, such as the current line", () => {
     const lines = highlightCode('{\n  "a": 1\n}', "json", CODE_THEME);
     const html = codeRows(lines, [], 1, "#d4d4d4", false, 40, 8, ["#242526", undefined, undefined]);
-    expect(html.match(/<tr style="background-color:#242526;">/g)).toHaveLength(1);
-    expect(html).toMatch(/<tr style="background-color:#242526;"><td[^>]*>1</);
-    expect(checkCanvasSafe(`<table><tbody>${html}</tbody></table>`)).toEqual([]);
+    expect(html.match(/background-color:#242526;/g)).toHaveLength(1);
+    expect(html).toMatch(/<div style="display:flex;min-width:0;background-color:#242526;"><div[^>]*>1</);
+    expect(checkCanvasSafe(`<div>${html}</div>`)).toEqual([]);
   });
 });

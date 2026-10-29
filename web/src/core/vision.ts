@@ -42,6 +42,7 @@ function mergeRegion(region: ModelRegion, reading: RegionReading): ModelRegion {
   const visionLines = reading.text.split("\n").map(tokens).filter((l) => l.length);
   const used = new Set<number>();
   const flags = region.flags.filter((f) => f.reason !== "sources-disagree");
+  const cutOff = new Set(region.flags.filter((flag) => flag.reason === "cut-off").map((flag) => flag.spanId));
 
   const lines = region.lines.map((line) => {
     const ocr = line.spans.map((s) => s.text);
@@ -61,6 +62,9 @@ function mergeRegion(region: ModelRegion, reading: RegionReading): ModelRegion {
       const seen = j === null || j === undefined ? null : words[j]!;
       const alternatives = span.alternatives.filter((a) => a.source !== "vision");
       if (seen === null || seen === span.text) return { ...span, alternatives };
+      // A model may complete a word hidden beyond the screenshot edge. Such
+      // completions aren't evidence, and must not become suggested readings.
+      if (cutOff.has(span.id) && seen.length > span.text.length) return { ...span, alternatives };
       flags.push({ reason: "sources-disagree", spanId: span.id, detail: `OCR read "${span.text}", vision model read "${seen}"` });
       return { ...span, alternatives: [...alternatives, { source: "vision", text: seen, confidence: null }] };
     });
@@ -73,7 +77,7 @@ function mergeRegion(region: ModelRegion, reading: RegionReading): ModelRegion {
   const seenWords = new Set(visionLines.flat());
   const matched = lines.map((line) => ({ ...line, spans: line.spans.map((span): Span => {
     if (span.alternatives.some((a) => a.source === "vision") || seenWords.has(span.text)) return span;
-    const fits = [...seenWords].filter((w) => onlyLookalikes(span.text, w));
+    const fits = [...seenWords].filter((w) => (!cutOff.has(span.id) || w.length <= span.text.length) && onlyLookalikes(span.text, w));
     if (fits.length !== 1) return span;
     flags.push({ reason: "sources-disagree", spanId: span.id, detail: `OCR read "${span.text}", vision model read "${fits[0]}"` });
     return { ...span, alternatives: [...span.alternatives, { source: "vision", text: fits[0]!, confidence: null }] };
@@ -107,7 +111,9 @@ export function onlyLookalikes(read: string, seen: string): boolean {
  *  lookalike characters and OCR wasn't sure: those are taken as fixed. Any
  *  other disagreement stays a suggestion for the reviewer. */
 export function lookalikeFixes(model: ScreenshotModel): { box: Span["box"]; from: string; to: string }[] {
+  const cutOff = new Set(model.regions.flatMap((region) => region.flags.filter((flag) => flag.reason === "cut-off").map((flag) => flag.spanId)));
   return model.regions.flatMap((r) => r.lines.flatMap((l) => l.spans)).flatMap((span) => {
+    if (cutOff.has(span.id)) return [];
     const seen = span.alternatives.find((a) => a.source === "vision")?.text;
     return seen && (span.confidence ?? 0) < TRUST_OCR && onlyLookalikes(span.text, seen) ? [{ box: span.box, from: span.text, to: seen }] : [];
   });

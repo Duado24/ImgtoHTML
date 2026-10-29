@@ -16,7 +16,6 @@ export function escapeHtml(text: string): string {
 const MONO = "Consolas,'Courier New',monospace";
 
 const WRAP = "white-space:pre-wrap;overflow-wrap:anywhere;padding-left:2ch;text-indent:-2ch;";
-const NO_WRAP = "white-space:pre;";
 
 /** One line <div>; runs that differ from the container's text color get a <span>. */
 function lineDiv(line: PaintedLine, lineStyle: string, indent: string, inherited: RGB | undefined): string {
@@ -64,15 +63,12 @@ const readableOn = (bg: RGB): RGB => (contrast(WHITE, bg) >= contrast(BLACK, bg)
  *  moved the rest outside the figure; separate line elements give it
  *  nothing to split.
  *
- *  Long lines:
- *    - code: never wrap (wrapping can change meaning); the code box
- *      scrolls sideways inside itself, the page does not.
- *    - everything else: wrap, with continued parts indented (hanging
- *      indent) so they read as the same line.
+ *  Long lines wrap visually, with continued parts indented (hanging indent)
+ *  so they read as the same line. The copied text keeps its original lines.
  */
 export function render(
   lines: readonly PaintedLine[],
-  kind: Kind,
+  _kind: Kind,
   label: string,
   background: RGB,
   foreground: RGB,
@@ -80,14 +76,12 @@ export function render(
 ): string {
   const bg = rgbHex(background);
   const fg = rgbHex(foreground);
-  const [lineStyle, boxOverflow] = kind === "code" ? [NO_WRAP, "overflow:hidden;"] : [WRAP, ""];
-
-  const lineDivs = lines.map((line) => lineDiv(line, lineStyle, "    ", foreground)).join("\n");
+  const lineDivs = lines.map((line) => lineDiv(line, WRAP, "    ", foreground)).join("\n");
 
   return figure(
     label,
     '  <div style="max-width:100%;min-width:0;box-sizing:border-box;' +
-      `${boxOverflow}padding:12px;background-color:${bg};color:${fg};` +
+      `padding:12px;background-color:${bg};color:${fg};` +
       `border:1px solid ${fg};border-radius:6px;` +
       `font:14px/1.5 ${MONO};">\n` +
       `${lineDivs}\n` +
@@ -163,7 +157,7 @@ export function renderPanels(
 
   const root = node(
     tree,
-    `max-width:100%;box-sizing:border-box;overflow:hidden;border:1px solid ${rgbHex(border)};` +
+    `max-width:100%;box-sizing:border-box;border:1px solid ${rgbHex(border)};` +
       `border-radius:6px;font-family:${MONO};line-height:1.5;`,
     "  ",
   );
@@ -172,6 +166,6 @@ export function renderPanels(
 
 /** Compact component content; structural positioning belongs to its parent. */
 export function renderLayoutPanel(panel: PaintedLeaf, background: RGB, foreground: RGB, height = 0, font = MONO): string {
-  return `<div style="box-sizing:border-box;min-width:0;min-height:${Math.round(height)}px;overflow:hidden;background-color:${rgbHex(background)};color:${rgbHex(foreground)};font:13px/1.45 ${font};padding:0 4px;">` +
-    panel.lines.map((line) => lineDiv(line, "white-space:pre;", "", foreground)).join("") + "</div>";
+  return `<div style="box-sizing:border-box;min-width:0;min-height:${Math.round(height)}px;background-color:${rgbHex(background)};color:${rgbHex(foreground)};font:13px/1.45 ${font};padding:0 4px;">` +
+    panel.lines.map((line) => lineDiv(line, "white-space:pre-wrap;overflow-wrap:anywhere;", "", foreground)).join("") + "</div>";
 }

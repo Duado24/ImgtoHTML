@@ -7,7 +7,7 @@ import { renderLayout, checkLayout, refineLayout, type LayoutAttempt, type Layou
 import { checkCanvasSafe, type CanvasIssue } from "./canvas";
 import { colorDistance, colorsFromWords, contrast, dominantColor, fixContrast, rgbHex, xHeight } from "./colors";
 import { layoutWords, type UncertainWord } from "./layout";
-import { buildModel, flagsByRegion, type ReviewState, type ScreenshotModel } from "./model";
+import { buildModel, countWordsToCheck, flagsByRegion, type ReviewState, type ScreenshotModel } from "./model";
 import { cleanCode, detectLanguage, highlightCode, measuredTheme, repairJsonBraces, type CodeCleanup } from "./code";
 import { renderDiagram, unconfirmedLabels, type Diagram } from "./diagram";
 import { codeRows, renderEditorWindow } from "./editor-window";
@@ -61,6 +61,8 @@ export interface Review {
   server_build?: string;
   visual_validation?: { status: "passed" | "failed" | "unavailable"; discrepancies: { component: string; error: number }[]; pixelMeanAbsoluteError: number | null; repaired: boolean; error?: string };
   low_confidence_words: UncertainWord[];
+  /** Text ending at a screenshot edge; the visible ellipsis isn't inferred text. */
+  cut_off_lines?: { component?: string; line: number; text: string }[];
   original_colors: { background: string; foreground: string };
   contrast_changes: ColorChange[];
   /** Course theme used (terminal and code), or null for the screenshot's own colors. */
@@ -114,6 +116,7 @@ export interface ConvertResult {
   caption: string | null;
   review: Review;
   lineCount: number;
+  /** Words still waiting for review; recomputed whenever decisions change. */
   lowConfidenceCount: number;
   /** Panels found in the screenshot, whatever type was chosen. */
   panelsFound: number;
@@ -193,17 +196,36 @@ const INK = 60;
 /** A code panel's OCR rows that start with a line number, left to right, one
  *  per code line; null unless there are exactly `lines` of them. */
 function numberedRows(words: readonly OcrWord[], lines: number): OcrWord[][] | null {
-  const numbered = layoutWords(words).rows.map((r) => r.words.map((w) => w.word).sort((a, b) => a.x - b.x)).filter((ws) => /^\d{1,4}$/.test(ws[0]?.text ?? ""));
+  const numbered = layoutWords(words).rows.map((r) => r.words.map((w) => w.word).sort((a, b) => a.x - b.x)).filter((ws) => /^\d{1,4}(?:\s|$)/.test(ws[0]?.text ?? ""));
   return numbered.length === lines ? numbered : null;
+}
+
+/** Keep source rows aligned with cleaned code even when OCR misread a gutter
+ *  number or an editor hint sits between two numbered lines. */
+function codeSourceRows(words: readonly OcrWord[], lines: number): OcrWord[][] {
+  const layout = layoutWords(words);
+  const rows = layout.rows.map((row) => row.words.map((w) => w.word));
+  const numbered = numberedRows(words, lines);
+  if (numbered) return numbered;
+  const cleaned = cleanCode(layout.lines);
+  if (cleaned.lineNumbersRemoved && cleaned.lines.length === lines) {
+    const numbered = (row: OcrWord[]) => /^\d{1,4}(?:\s|$)/.test(row[0]?.text ?? "");
+    const start = rows.findIndex(numbered), end = rows.reduce((last, row, i) => numbered(row) ? i : last, -1);
+    const hints = new Set(cleaned.hints.map((hint) => hint.text));
+    const selected = rows.slice(start, end + 1).filter((row) => !hints.has(layoutWords(row).lines.join("\n").trim()));
+    if (selected.length === lines) return selected;
+  }
+  return rows.length === lines ? rows : [];
 }
 
 /** Per code line, whether its text runs to the panel's right edge, cut off
  *  there in the screenshot (within 1.5 characters of the edge). */
 function clippedLines(words: readonly OcrWord[], box: Box, lines: number): boolean[] {
-  const numbered = numberedRows(words, lines);
-  if (!numbered) return [];
+  if (!words.length || !lines) return [];
+  const rows = codeSourceRows(words, lines);
+  if (rows.length !== lines) return [];
   const char = middle(words.map((w) => w.width / Math.max(1, w.text.length)));
-  return numbered.map((ws) => Math.max(...ws.map((w) => w.x + w.width)) >= box.x + box.width - char * 1.5);
+  return rows.map((ws) => Math.max(...ws.map((w) => w.x + w.width)) >= box.x + box.width - char * 1.5);
 }
 
 /** The quote a line leaves open at its end, or null. */
@@ -331,6 +353,27 @@ export function convert(input: ConvertInput): ConvertResult {
   const tree = segment(pixels, words);
   const panelsFound = leaves(tree).length;
   const model = buildModel(pixels.width, pixels.height, kind, tree, words);
+  if (transcript !== null) model.regions.forEach((region) => { region.review = "corrected"; });
+  const cutOffLines: NonNullable<Review["cut_off_lines"]> = [];
+  const markCutOff = (lines: string[], panelWords: readonly OcrWord[], box: Box, component?: string): { lines: string[]; clipped: boolean[] } => {
+    const clipped = clippedLines(panelWords, box, lines.length);
+    const rows = codeSourceRows(panelWords, lines.length);
+    return {
+      clipped,
+      lines: lines.map((text, i) => {
+        if (!clipped[i]) return text;
+        cutOffLines.push({ ...(component ? { component } : {}), line: i + 1, text });
+        const last = rows[i]?.reduce((right, word) => word.x + word.width > right.x + right.width ? word : right);
+        if (last) for (const region of model.regions) {
+          const span = region.lines.flatMap((line) => line.spans).find((s) => s.box.x === last.x && s.box.y === last.y && s.text === last.text);
+          if (!span) continue;
+          region.flags.push({ reason: "cut-off", spanId: span.id, detail: "This line was cut off in the screenshot." });
+          region.review = "pending";
+        }
+        return /(?:…|\.{3})$/.test(text) ? text : `${text}…`;
+      }),
+    };
+  };
   // Terminals and code use the course theme; other kinds keep the screenshot's colors.
   const theme = themeFor(kind);
   const boxBackground = theme?.background ?? background;
@@ -369,16 +412,17 @@ export function convert(input: ConvertInput): ConvertResult {
         const repaired = language === "json" ? repairJsonBraces(cleaned.lines) : { lines: cleaned.lines, repaired: 0 };
         // Duplicate opening quotes before a nonempty JSON value are a localized OCR artifact.
         const normalized = language === "json" ? repaired.lines.map((l) => l.replace(/^(\s*"[^"]+"\s*:\s*)"{2}(?=[\p{L}\p{N}_./])/u, '$1"')) : repaired.lines;
+        const edge = markCutOff(normalized, panelWords, box, component.id);
         // The screenshot's own syntax colors where it shows enough of each kind; Dark+ otherwise.
         const ocrRows = layoutWords(panelWords).rows.map((r) => r.words.map((w) => w.word));
         const { theme: own, measured } = measuredTheme(ocrRows, language, CODE_THEME, (w, i) => letterInk(pixels, w as OcrWord, i, looks.get(w as OcrWord)?.background));
         const palette = { ...own, background: bg, colors: Object.fromEntries(Object.entries(own.colors).map(([k, color]) => [k, fixContrast(color, bg)])) as typeof CODE_THEME.colors };
-        const highlighted = highlightClipped(normalized, clippedLines(panelWords, box, normalized.length), language, palette).map((line) => ({ ...line, runs: line.runs.map((run) => ({ ...run, color: run.color ? fixContrast(run.color, bg) : undefined })) }));
+        const highlighted = highlightClipped(edge.lines, edge.clipped, language, palette).map((line) => ({ ...line, runs: line.runs.map((run) => ({ ...run, color: run.color ? fixContrast(run.color, bg) : undefined })) }));
         painted.push(...highlighted);
         const details: NonNullable<Review["code"]> = { editor_window: true, language, line_numbers_removed: cleaned.lineNumbersRemoved, lines_outside_code: cleaned.linesOutsideCode, panels_left_out: 0, quotes_straightened: cleaned.quotesStraightened, braces_repaired: repaired.repaired, duplicate_quotes_removed: normalized.filter((l, i) => l !== repaired.lines[i]).length, indent_unit: cleaned.indentUnit, lines_snapped: cleaned.linesSnapped };
         codePanels.push({ component: component.id, cleanup: details, colors_measured: measured });
         code ??= details;
-        const plain = (lines: string[]) => lines.map((l) => `<div style="white-space:pre;">${escapeHtml(l)}</div>`).join("");
+        const plain = (lines: string[]) => lines.map((l) => `<div style="min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;">${escapeHtml(l)}</div>`).join("");
         // Keep observed text outside the gutter, including footer labels and code hints.
         const lastNumber = cleaned.lineNumbersRemoved ? raw.reduce((last, l, i) => /^\s*\d{1,4}(\s+|$)/.test(l) ? i : last, -1) : raw.length - 1;
         const suffix = raw.slice(lastNumber + 1);
@@ -386,13 +430,14 @@ export function convert(input: ConvertInput): ConvertResult {
           const ordered = row.words.map((w) => w.word).sort((a, b) => a.x - b.x);
           return ordered[0] && /^\d{1,4}$/.test(ordered[0].text) && ordered[1] ? [ordered[1].x] : [];
         });
-        const gutterWidth = codeStarts.length >= 3 ? Math.max(20, Math.min(...codeStarts) - box.x - 8) : 40;
+        // Capped so a wide gutter in the screenshot doesn't take a phone's room from the code.
+        const gutterWidth = codeStarts.length >= 3 ? Math.min(64, Math.max(20, Math.min(...codeStarts) - box.x - 8)) : 40;
         const lineBackgrounds = codeLineBackgrounds(pixels, panelWords, box, bg, highlighted.length);
         details.lines_highlighted = lineBackgrounds.filter(Boolean).length;
         const rows = cleaned.lineNumbersRemoved ? codeRows(highlighted, cleaned.hints, cleaned.firstLine, rgbHex(palette.colors.text), false, gutterWidth, codeStarts.length >= 3 ? 8 : 14, lineBackgrounds)
-          : highlighted.map((l) => `<tr><td style="padding:0;white-space:pre;">${l.runs.map((r) => `<span style="color:${rgbHex(r.color ?? palette.colors.text)};">${escapeHtml(r.text)}</span>`).join("")}</td></tr>`).join("");
-        layoutSections.push({ component: component.id, type: component.type, lines: [...cleaned.header, ...normalized, ...suffix] });
-        return `<div style="min-height:${Math.round(box.height)}px;background-color:${rgbHex(bg)};color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};overflow:hidden;">${plain(cleaned.header)}<table style="width:100%;border-collapse:collapse;border:none;color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};"><tbody>${rows}</tbody></table>${plain(suffix)}</div>`;
+          : highlighted.map((l) => `<div style="min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;">${l.runs.map((r) => `<span style="color:${rgbHex(r.color ?? palette.colors.text)};">${escapeHtml(r.text)}</span>`).join("") || "<br>"}</div>`).join("");
+        layoutSections.push({ component: component.id, type: component.type, lines: [...cleaned.header, ...edge.lines, ...suffix] });
+        return `<div style="min-width:0;min-height:${Math.round(box.height)}px;background-color:${rgbHex(bg)};color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};">${plain(cleaned.header)}<div style="min-width:0;color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};">${rows}</div>${plain(suffix)}</div>`;
       }
       const removed = component ? panelWords.filter((w) => chromeNoise(w, component)) : [];
       const arrows = component ? treeArrows(panelWords, component) : new Map<OcrWord, string>();
@@ -419,13 +464,13 @@ export function convert(input: ConvertInput): ConvertResult {
         return rows.map((row) => {
           const items = splitItems(row.words.map((w) => w.word), pixels);
           const height = rows.length > 1 ? Math.min(box.height / rows.length, 20) : box.height;
-          return '<table role="presentation" style="width:100%;table-layout:fixed;border-collapse:collapse;border:none;"><tbody><tr>' + items.map((item, i) => {
+          return '<div style="display:flex;flex-wrap:wrap;min-width:0;">' + items.map((item, i) => {
             const bounds = itemBox(item, { ...box, height });
             const next = items[i + 1];
             const right = next ? Math.min(...next.map((w) => w.x)) - 4 : box.x + box.width;
             const width = Math.max(1, right - (i === 0 ? box.x : bounds.x));
-            return `<td style="width:${100 * width / box.width}%;vertical-align:top;padding:0;border:none;">${draw(item, bounds)}</td>`;
-          }).join("") + '</tr></tbody></table>';
+            return `<div style="flex:0 1 ${Math.round(width)}px;min-width:0;max-width:100%;box-sizing:border-box;">${draw(item, bounds)}</div>`;
+          }).join("") + '</div>';
         }).join("");
       }
       // UI indentation uses pixel padding rather than spaces in a proportional font.
@@ -439,7 +484,7 @@ export function convert(input: ConvertInput): ConvertResult {
           const gap = Math.max(0, y - previousY - (first ? 0 : 18.85));
           previousY = y;
           first = false;
-          return `<div style="padding-top:${gap}px;padding-left:${Math.max(0, Math.round(x - box.x))}px;">${draw(ws, { ...box, x, width: box.width - (x - box.x), height: 0 })}</div>`;
+          return `<div style="box-sizing:border-box;min-width:0;padding-top:${gap}px;padding-left:${Math.min(48, Math.max(0, Math.round(x - box.x)))}px;">${draw(ws, { ...box, x, width: box.width - (x - box.x), height: 0 })}</div>`;
         }).join("") + '</div>';
       }
       return draw(visible, box);
@@ -465,7 +510,9 @@ export function convert(input: ConvertInput): ConvertResult {
     // OCR text only: a typed transcript is used exactly as given.
     const braces = language === "json" && cleaned ? repairJsonBraces(textLines) : { lines: textLines, repaired: 0 };
     textLines = braces.lines;
-    painted = highlightCode(textLines.join("\n"), language, theme);
+    const edge = editor ? markCutOff(textLines, editor.leaf.words, editor.leaf.box) : { lines: textLines, clipped: [] };
+    textLines = edge.lines;
+    painted = highlightClipped(textLines, edge.clipped, language, theme);
     // Draw the editor window (sidebar, tabs, line numbers) when the
     // screenshot is an editor with numbered lines, unless turned off.
     const framed = editor !== null && cleaned!.lineNumbersRemoved && input.editorWindow !== false;
@@ -543,6 +590,7 @@ export function convert(input: ConvertInput): ConvertResult {
     layout,
     layout_status: { renderer, application: checked?.layout?.application ?? null, reason: skipLayout },
     low_confidence_words: uncertain,
+    ...(cutOffLines.length ? { cut_off_lines: cutOffLines } : {}),
     original_colors: {
       background: rgbHex(measured.background),
       foreground: rgbHex(measured.foreground),
@@ -569,6 +617,7 @@ export function convert(input: ConvertInput): ConvertResult {
       manual_review_required: true,
     },
     limitations: [
+      ...(cutOffLines.length ? ["Some lines were cut off in the screenshot; an ellipsis marks their visible end. No missing text was invented."] : []),
       "OCR requires character-by-character review",
       "Whitespace reconstruction is approximate",
       "Text colors are measured per letter from the screenshot; thin or tiny letters can pick up a blended color",
@@ -591,7 +640,7 @@ export function convert(input: ConvertInput): ConvertResult {
     caption,
     review,
     lineCount: textLines.length,
-    lowConfidenceCount: uncertain.length,
+    lowConfidenceCount: countWordsToCheck(model),
     panelsFound,
     fromTranscript: transcript !== null,
     stem,
@@ -628,6 +677,7 @@ export function addVision(result: ConvertResult, model: string, readings: readon
     ...result,
     review,
     model: merged,
+    lowConfidenceCount: countWordsToCheck(merged),
     reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) },
     modelFile: { ...result.modelFile, content: JSON.stringify(merged, null, 2) },
   };
@@ -667,6 +717,7 @@ export function applyDecisions(result: ConvertResult, decisions: ReadonlyMap<str
     ...result,
     review,
     model,
+    lowConfidenceCount: countWordsToCheck(model),
     reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) },
     modelFile: { ...result.modelFile, content: JSON.stringify(model, null, 2) },
   };

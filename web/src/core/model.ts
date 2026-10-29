@@ -43,7 +43,7 @@ export interface ModelLine {
   spans: Span[];
 }
 
-export type FlagReason = "low-confidence" | "confusable" | "suggested-fix" | "sources-disagree";
+export type FlagReason = "low-confidence" | "confusable" | "suggested-fix" | "sources-disagree" | "cut-off";
 
 export interface Flag {
   reason: FlagReason;
@@ -62,6 +62,8 @@ export interface ModelRegion {
   confidence: number | null;
   flags: Flag[];
   review: ReviewState;
+  /** Keeps the checklist item after a correction clears its original flags. */
+  reviewRequested?: boolean;
 }
 
 export interface ScreenshotModel {
@@ -164,4 +166,18 @@ export function flagsByRegion(model: ScreenshotModel): { region: string; confide
     .filter((r) => r.flags.length && r.review === "pending")
     .map((r) => ({ region: r.id, confidence: r.confidence, flags: r.flags }))
     .sort((a, b) => (a.confidence ?? 0) - (b.confidence ?? 0));
+}
+
+/** Flagged words still waiting for a person's review: only the doubtful
+ *  words, not every word around them. A pending region whose flags were
+ *  cleared by a correction still needs its final look, so it counts one.
+ *  Reviewed or skipped regions keep their evidence but no longer count. */
+export function countWordsToCheck(model: ScreenshotModel): number {
+  return model.regions
+    .filter((region) => region.review === "pending")
+    .reduce((count, region) => {
+      const words = new Map(region.lines.flatMap((line) => line.spans).map((span) => [span.id, span.text]));
+      const flagged = new Set(region.flags.map((flag) => flag.spanId).filter((id) => /[\p{L}\p{N}]/u.test(words.get(id) ?? "")));
+      return count + Math.max(1, flagged.size);
+    }, 0);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildModel, flagsByRegion } from "../src/core/model";
+import { buildModel, countWordsToCheck, flagsByRegion } from "../src/core/model";
 import type { Leaf, Region } from "../src/core/regions";
 import type { OcrWord } from "../src/core/types";
 
@@ -51,5 +51,15 @@ describe("buildModel", () => {
   it("lists flagged regions least confident first", () => {
     const model = buildModel(410, 100, "terminal", tree, [...left, ...right]);
     expect(flagsByRegion(model).map((r) => r.region)).toEqual(["r2", "r1"]);
+  });
+
+  it("counts only flagged words in regions still waiting for review", () => {
+    const model = buildModel(410, 100, "terminal", tree, [...left, ...right]);
+    // "On" (blurry) and "Iog" (lookalikes); "git" and "status" were read clearly.
+    expect(countWordsToCheck(model)).toBe(2);
+    model.regions[0]!.review = "approved";
+    expect(countWordsToCheck(model)).toBe(1);
+    model.regions[1]!.review = "corrected";
+    expect(countWordsToCheck(model)).toBe(0);
   });
 });

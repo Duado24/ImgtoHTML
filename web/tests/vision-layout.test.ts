@@ -51,11 +51,12 @@ describe("vision layout", () => {
     expect(status({ layout, editorWindow: false })).toMatchObject({ renderer: "rows", reason: "the editor window option is off" });
     expect(status({ layout: { ...layout, application: "terminal" } })).toMatchObject({ renderer: "rows", application: "terminal", reason: '"terminal" screenshots use the terminal renderer' });
   });
-  it("corrects terminal classification for an IDE, preserves privacy and emits Canvas-safe inline tables", () => {
+  it("corrects terminal classification for an IDE, preserves privacy and emits Canvas-safe wrapping flex columns", () => {
     const pixels = { width: 1033, height: 367, data: new Uint8ClampedArray(1033 * 367 * 4).fill(30) };
     const result = convert({ fileName: "ide.png", pixels, words, animated: false, kind: "terminal", layout });
     expect(result.review.type).toBe("interface");
-    expect(result.html).toContain('<table role="presentation"');
+    expect(result.html).not.toMatch(/<(?:table|tr|td)\b/i);
+    expect(result.html).toContain('display:flex;flex-wrap:wrap;');
     expect(result.html).toContain('id="layout-explorer"');
     expect(result.html).toContain('id="layout-code"');
     expect(result.html).not.toContain("alice");

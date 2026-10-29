@@ -1,10 +1,10 @@
 import "./style.css";
-import { reviewCounts, reviewReadyText } from "./browser/review-status";
+import { checklistRegions, checklistSummary, focusLines, reviewCounts, reviewReadyText, reviewReading, reviewReasons, type FocusLine } from "./browser/review-status";
 
 import { issuesFor, type ConvertResult, type OutputFile } from "./core/convert";
 import type { ModelRegion } from "./core/model";
 import { isKind } from "./core/types";
-import { SUPPORTED, type JobResult } from "./shared/api";
+import { SUPPORTED, type JobProgress, type JobResult } from "./shared/api";
 import { cancelJob, convertOnServer, decide, editSpan, retryRegion } from "./browser/api";
 
 const MAX_MB = 25;
@@ -31,6 +31,10 @@ let jobId = "";
 let action = 0;
 let current: ConvertResult | null = null;
 let objectUrls: string[] = [];
+let editingRegion: string | null = null;
+let selectedRegion: string | null = null;
+let reviewImage = new Image();
+let displayedPercent = 0;
 
 /* ── Theme: solid black or solid white. Follows the computer's
    light/dark setting until the button is used (then remembered). ── */
@@ -56,12 +60,23 @@ $("theme").onclick = () => {
 function say(msg: string, isErr = false) {
   status.className = "status" + (isErr ? " err" : "");
   status.textContent = msg;
-  if (!isErr) {
-    const c = document.createElement("span");
-    c.className = "cursor";
-    c.setAttribute("aria-hidden", "true");
-    status.appendChild(c);
-  }
+}
+
+function beginProgress() {
+  displayedPercent = 0;
+  $("conversion-progress").hidden = false;
+  updateProgress("Opening the image…", { progress: "Opening the image…", percent: 0, stage: "queued", step: 0, totalSteps: 5 });
+}
+
+function updateProgress(message: string, progress?: JobProgress) {
+  displayedPercent = Math.max(displayedPercent, Math.min(100, Math.round(progress?.percent ?? displayedPercent)));
+  const step = progress?.step ? `Step ${progress.step} of ${progress.totalSteps}: ` : "";
+  const text = `${step}${message.replace(/[.…]+$/, "")} — ${displayedPercent}%`;
+  $("progress-label").textContent = text;
+  $("progress").setAttribute("aria-valuenow", String(displayedPercent));
+  $("progress").setAttribute("aria-valuetext", text);
+  $("progress-fill").style.width = `${displayedPercent}%`;
+  say(text);
 }
 
 /* ── File choice / drag and drop ────────────────── */
@@ -125,6 +140,8 @@ async function run(transcriptText?: string) {
   go.disabled = reconvert.disabled = true;
   cancel.hidden = false;
   cancel.disabled = true;
+  editingRegion = selectedRegion = null;
+  beginProgress();
 
   try {
     const result = await convertOnServer(file, {
@@ -133,12 +150,14 @@ async function run(transcriptText?: string) {
       caption: captionInput.value,
       transcript: transcriptText,
       editorWindow: $<HTMLInputElement>("window").checked,
-    }, (message) => say(message), (id) => { jobId = id; cancel.disabled = false; });
+    }, updateProgress, (id) => { jobId = id; cancel.disabled = false; });
     if (/\.tiff?$/i.test(file.name)) $<HTMLImageElement>("orig").src = result.imageDataUrl;
     show(result, result.preview);
     say(readyText(result));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    // A stalled bar would read as still working.
+    $("conversion-progress").hidden = true;
     say(`Conversion failed: ${msg}`, true);
   } finally {
     shell.classList.remove("busy");
@@ -184,6 +203,8 @@ function show(result: ConvertResult, preview: OutputFile) {
   $("results").hidden = false;
   lastHTML = result.html;
   current = result;
+  reviewImage = new Image();
+  reviewImage.src = (result as JobResult).imageDataUrl || $<HTMLImageElement>("orig").src;
   renderReview(result);
   const { review } = result;
   $("layout-status").textContent = `Renderer: ${review.layout_status.renderer}.${review.layout_status.reason ? ` Layout not used: ${review.layout_status.reason}.` : ""}`;
@@ -193,8 +214,6 @@ function show(result: ConvertResult, preview: OutputFile) {
 
 
   $("s-lines").textContent = String(result.lineCount);
-  $("s-low").textContent = String(result.lowConfidenceCount);
-  $("s-low").style.color = result.lowConfidenceCount ? "var(--coral)" : "";
   $("s-contrast").textContent = review.contrast_ratio.toFixed(1);
   const background = review.original_colors.background;
   const foreground = review.text_color;
@@ -236,19 +255,17 @@ function show(result: ConvertResult, preview: OutputFile) {
   files.append(
     downloadButton(result.htmlFile, "Canvas HTML"),
     downloadButton(result.transcriptFile, "Transcript"),
-    downloadButton(result.reviewFile, "Review JSON"),
-    downloadButton(result.modelFile, "Model JSON"),
     downloadButton(preview, "Comparison page"),
   );
+  const technicalFiles = $("technical-files");
+  technicalFiles.replaceChildren(technicalFiles.firstElementChild!);
+  technicalFiles.append(downloadButton(result.reviewFile, "Review JSON"), downloadButton(result.modelFile, "Model JSON"));
 
   $("code").textContent = result.html;
   $<HTMLTextAreaElement>("transcript").value = result.transcript;
 
   const frame = $<HTMLIFrameElement>("render");
-  frame.onload = () => {
-    const h = frame.contentDocument?.documentElement.scrollHeight ?? 0;
-    frame.style.height = Math.max(240, h + 4) + "px";
-  };
+  frame.onload = resizePreview;
   frame.srcdoc =
     '<!doctype html><meta name="viewport" content="width=device-width">' +
     '<body style="margin:16px;background:#fff;color:#2d3b45;font-family:Lato,Arial,sans-serif">' +
@@ -257,8 +274,6 @@ function show(result: ConvertResult, preview: OutputFile) {
 }
 
 /* ── Review loop ────────────────────────────────── */
-const toReview = (r: ConvertResult) => r.model.regions.filter((x) => x.review === "pending" && x.flags.length);
-
 function readyText(r: ConvertResult): string {
   return reviewReadyText(r.model.regions);
 }
@@ -284,6 +299,7 @@ async function act(work: () => Promise<JobResult>, busy: string, cancellable = f
   cancel.hidden = !cancellable;
   cancel.disabled = true;
   shell.classList.add("busy");
+  if (cancellable) beginProgress();
   say(busy);
   try {
     const result = await work();
@@ -298,82 +314,195 @@ async function act(work: () => Promise<JobResult>, busy: string, cancellable = f
 }
 
 function highlight(region: string | null) {
+  selectedRegion = region;
   for (const box of $("boxes").children) (box as HTMLElement).classList.toggle("active", (box as HTMLElement).dataset.region === region);
   for (const card of $("regions").children) (card as HTMLElement).classList.toggle("active", (card as HTMLElement).dataset.region === region);
 }
 
-function regionCard(region: ModelRegion): HTMLLIElement {
+/** Text in a crop is drawn about this tall (CSS px), so letters can be compared. */
+const CROP_LINE_HEIGHT = 22;
+
+/** Crop the decoded original, never a reconstruction or a generated preview:
+ *  just the lines with doubtful words, enlarged when the text is small. The
+ *  crop keeps that size; a wide one scrolls sideways inside its card. */
+function screenshotCrop(lines: readonly FocusLine[], region: ModelRegion): HTMLCanvasElement {
+  const canvas = el("canvas", "review-crop");
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", "This spot in the original screenshot");
+  const source = reviewImage;
+  const draw = () => {
+    const bounds = lines.length ? lines.map((line) => line.box) : [region.box];
+    const x = Math.max(0, Math.min(...bounds.map((box) => box.x)) - 8);
+    const y = Math.max(0, Math.min(...bounds.map((box) => box.y)) - 8);
+    const width = Math.max(1, Math.min(source.naturalWidth - x, Math.max(...bounds.map((box) => box.x + box.width)) - x + 8));
+    const height = Math.max(1, Math.min(source.naturalHeight - y, Math.max(...bounds.map((box) => box.y + box.height)) - y + 8));
+    const heights = bounds.map((box) => box.height).sort((a, b) => a - b);
+    const lineHeight = Math.max(1, heights[Math.floor(heights.length / 2)]!);
+    const scale = Math.min(3, Math.max(1, CROP_LINE_HEIGHT / lineHeight), 4000 / width);
+    canvas.width = Math.ceil(width * scale);
+    canvas.height = Math.ceil(height * scale);
+    canvas.getContext("2d")?.drawImage(source, x, y, width, height, 0, 0, canvas.width, canvas.height);
+  };
+  if (source.complete && source.naturalWidth) draw();
+  else source.addEventListener("load", draw, { once: true });
+  return canvas;
+}
+
+function regionCard(region: ModelRegion, result: ConvertResult, index: number): HTMLLIElement {
   const li = el("li", "region");
   li.dataset.region = region.id;
-  const sure = region.confidence === null ? "" : ` · ${Math.round(region.confidence * 100)}% sure`;
-  li.append(el("h3", "", `${region.id} · ${region.role}${sure}`));
-
-  // One row per flagged word: why it was flagged, other readings to pick, or type it.
-  const spans = new Map(region.lines.flatMap((l) => l.spans).map((s) => [s.id, s]));
-  const reasons = new Map<string, string[]>();
-  for (const flag of region.flags) reasons.set(flag.spanId, [...(reasons.get(flag.spanId) ?? []), flag.detail]);
-  for (const [spanId, details] of reasons) {
-    const span = spans.get(spanId);
-    if (!span) continue;
-    const row = el("div", "flag");
-    row.append(el("code", "", span.text), el("span", "", details.join(" · ")));
-    for (const text of new Set(span.alternatives.map((a) => a.text).filter((t) => t !== span.text))) {
-      const use = button("Use ", () => void act(() => editSpan(jobId, span.id, text), "Saving…"));
-      use.append(el("code", "", text)); // shown as is: the button style uppercases its own label
-      row.append(use);
-    }
-    const input = el("input");
-    input.value = span.text;
-    input.setAttribute("aria-label", `Correct the word “${span.text}”`);
-    row.append(input, button("Save", () => void act(() => editSpan(jobId, span.id, input.value), "Saving…")));
-    li.append(row);
+  li.id = `check-${region.id}`;
+  li.tabIndex = 0;
+  const checked = region.review === "approved" || region.review === "corrected";
+  li.classList.toggle("checked", checked);
+  li.append(el("h3", "", `Check ${index + 1}${checked ? " · Checked" : region.review === "skipped" ? " · Skipped for now" : ""}`));
+  if (!checked) for (const reason of reviewReasons(region)) li.append(el("p", "review-reason", reason));
+  const lines = focusLines(region);
+  const comparison = el("div", "review-comparison");
+  const picture = el("figure");
+  const crop = el("div", "review-crop-scroll");
+  crop.append(screenshotCrop(lines, region));
+  picture.append(el("figcaption", "", "Original screenshot"), crop);
+  const reading = el("figure");
+  const text = el("pre", "review-reading");
+  lines.forEach((line, i) => {
+    if (i) text.append("\n");
+    for (const part of line.parts) text.append(part.flagged ? el("mark", "", part.text) : part.text);
+  });
+  reading.append(el("figcaption", "", checked ? "What the HTML says" : "What the HTML says (words to check are marked)"), text);
+  comparison.append(picture, reading);
+  li.append(comparison);
+  const whole = reviewReading(result, region);
+  if (whole.trim() && whole.split("\n").length > lines.length) {
+    const more = el("details", "review-whole");
+    more.append(el("summary", "", "Show all the text in this part"), el("pre", "review-reading", whole));
+    li.append(more);
   }
-
+  li.append(el("p", "review-question", "Is this text the same as the picture?"));
+  const editor = el("div", "review-editor");
+  editor.hidden = editingRegion !== region.id;
+  const edits = new Map<string, { original: string; input: HTMLInputElement }>();
+  const flagged = new Set(region.flags.map((flag) => flag.spanId));
+  const spans = region.lines.flatMap((line) => line.spans);
+  function addEdit(span: (typeof spans)[number], parent: HTMLElement) {
+    const row = el("div", "flag");
+    const label = el("label", "", `Read as “${span.text}”`);
+    const input = el("input");
+    input.type = "text";
+    input.value = span.text;
+    input.id = `edit-${span.id}`;
+    label.htmlFor = input.id;
+    row.append(label, input);
+    edits.set(span.id, { original: span.text, input });
+    for (const text of new Set(span.alternatives.map((alternative) => alternative.text).filter((text) => text !== span.text))) {
+      row.append(button(`Use “${text}”`, () => { input.value = text; input.focus(); }));
+    }
+    parent.append(row);
+  }
+  spans.filter((span) => flagged.has(span.id)).forEach((span) => addEdit(span, editor));
+  const otherWords = spans.filter((span) => !flagged.has(span.id));
+  if (otherWords.length) {
+    const more = el("details");
+    more.append(el("summary", "", "Change another word"));
+    otherWords.forEach((span) => addEdit(span, more));
+    editor.append(more);
+  }
+  editor.append(button("Save fixes", () => {
+    const changes = [...edits].filter(([, value]) => value.input.value !== value.original);
+    if (changes.some(([, value]) => !value.input.value.trim() || /\s/.test(value.input.value))) {
+      say("Enter one word in each box. Use the Transcript tab to change a whole line.", true);
+      return;
+    }
+    void act(async () => {
+      for (const [span, value] of changes) await editSpan(jobId, span, value.input.value);
+      const updated = await decide(jobId, region.id, "approved");
+      editingRegion = null;
+      return updated;
+    }, "Saving your fixes…");
+  }, "primary"));
   const hint = el("input");
-  hint.placeholder = "Optional hint, e.g. “this is a table”";
-  hint.setAttribute("aria-label", `Hint for reading ${region.id} again`);
+  hint.type = "text";
+  hint.placeholder = "Optional hint, e.g. “this says world”";
+  hint.setAttribute("aria-label", "Hint for reading this spot again");
+  const retry = el("details", "read-again");
+  retry.append(el("summary", "", "Read this spot again"), hint,
+    button("Focus here", () => void act(() => retryRegion(jobId, region.id, hint.value, updateProgress, () => { cancel.disabled = false; }), "Reading this spot again…", true)));
+  editor.append(retry);
   const actions = el("div", "actions");
   actions.append(
-    button("Looks right", () => void act(() => decide(jobId, region.id, "approved"), "Saving…"), "primary"),
-    button("Doesn't look right — focus here", () => void act(() => retryRegion(jobId, region.id, hint.value, (m) => say(m), () => { cancel.disabled = false; }), `Reading ${region.id} again…`, true)),
-    hint,
-    button("Skip", () => void act(() => decide(jobId, region.id, "skipped"), "Saving…")),
+    button("Yes, it matches", () => void act(() => decide(jobId, region.id, "approved"), "Saving your check…"), "primary"),
+    button("Fix it", () => { editingRegion = editor.hidden ? region.id : null; editor.hidden = !editor.hidden; if (!editor.hidden) editor.querySelector("input")?.focus(); }),
+    button("Skip for now", () => void act(() => decide(jobId, region.id, "skipped"), "Skipping for now…")),
   );
-  li.append(actions);
+  if (checked) actions.firstElementChild?.remove();
+  li.append(actions, editor);
+  li.addEventListener("click", () => highlight(region.id));
   li.addEventListener("mouseenter", () => highlight(region.id));
   li.addEventListener("focusin", () => highlight(region.id));
-  li.addEventListener("mouseleave", () => highlight(null));
   return li;
 }
 
 function renderReview(result: ConvertResult) {
   const { width, height, regions } = result.model;
-  const flagged = regions.filter((r) => r.flags.length);
+  const flagged = checklistRegions(regions);
   const pct = (x: number) => `${(x * 100).toFixed(2)}%`;
   $("boxes").replaceChildren(
     ...flagged.map((r) => {
-      const box = el("div");
+      const box = el("button");
+      box.type = "button";
       box.dataset.region = r.id;
+      box.setAttribute("aria-label", `Check this spot in the screenshot${r.review === "skipped" ? ", skipped for now" : ""}`);
       const serious = r.flags.some((f) => f.reason !== "confusable");
       box.className = r.review === "pending" ? (serious ? "bad" : "") : r.review === "skipped" ? "skipped" : "done";
       Object.assign(box.style, { left: pct(r.box.x / width), top: pct(r.box.y / height), width: pct(r.box.width / width), height: pct(r.box.height / height) });
+      box.onclick = () => {
+        highlight(r.id);
+        const card = document.getElementById(`check-${r.id}`);
+        card?.scrollIntoView({ block: "nearest", behavior: "instant" });
+        card?.focus({ preventScroll: true });
+      };
       return box;
     }),
   );
-  const pending = toReview(result);
-  $("review").hidden = flagged.length === 0;
-  const counts = reviewCounts(regions);
-  $("review-count").textContent = `${counts.pending} pending / ${counts.approved} approved / ${counts.corrected} corrected / ${counts.skipped} skipped (unverified)`;
-  $<HTMLButtonElement>("skip-all").disabled = pending.length === 0;
-  $("regions").replaceChildren(...pending.map(regionCard));
+  const summary = checklistSummary(result.model);
+  $("review-title").textContent = summary.heading;
+  $("review-count").textContent = `${summary.checked} of ${summary.total} checked`;
+  $("s-low").textContent = String(summary.words);
+  $("review-progress").setAttribute("aria-valuenow", String(summary.percent));
+  $("review-progress").setAttribute("aria-valuetext", `${summary.checked} of ${summary.total} checked`);
+  $("review-progress-fill").style.width = `${summary.percent}%`;
+  $("review-skipped").hidden = summary.skipped === 0;
+  $("review-skipped").textContent = `${summary.skipped} skipped for now. You can come back to check ${summary.skipped === 1 ? "it" : "them"} before you paste.`;
+  $<HTMLButtonElement>("skip-all").hidden = summary.pending === 0;
+  $("regions").replaceChildren(...flagged.map((region, index) => regionCard(region, result, index)));
+  $("region-details").replaceChildren(...flagged.map((region) => el("li", "", `${region.id} · ${region.role} · ${region.confidence === null ? "unknown confidence" : `${Math.round(region.confidence * 100)}% confidence`} · ${region.review}. ${region.flags.map((flag) => flag.detail).join("; ")}`)));
+  highlight(selectedRegion);
 }
 
 $("skip-all").onclick = () => void act(() => decide(jobId, "all", "skipped"), "Skipping the rest…");
 
 /* ── Preview width ──────────────────────────────── */
 document.querySelectorAll<HTMLInputElement>('input[name="width"]').forEach((r) => {
-  r.onchange = () => $("compare").classList.toggle("phone", r.value === "phone" && r.checked);
+  r.onchange = () => {
+    $("compare").classList.toggle("phone", r.value === "phone" && r.checked);
+    requestAnimationFrame(resizePreview);
+  };
 });
+
+function resizePreview() {
+  const frame = $<HTMLIFrameElement>("render");
+  // Reset before measuring so a previous tall view can shrink after reflow.
+  frame.style.height = "240px";
+  const height = frame.contentDocument?.documentElement.scrollHeight ?? 0;
+  frame.style.height = Math.max(240, height + 4) + "px";
+}
+let previewWidth = 0;
+new ResizeObserver(([entry]) => {
+  if (entry && entry.contentRect.width !== previewWidth) {
+    previewWidth = entry.contentRect.width;
+    resizePreview();
+  }
+}).observe($("compare"));
 
 /* ── Copy ───────────────────────────────────────── */
 $("copy").onclick = async () => {

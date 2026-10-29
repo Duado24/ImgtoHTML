@@ -6,9 +6,9 @@ import type { Box, OcrWord, Pixels, RGB } from "../../src/core/types";
 import type { OcrEngine } from "./engine";
 
 const PAD = 8;
-export type Progress = (status: string) => void;
+export type Progress = (status: string, percent: number) => void;
 
-async function readArea(engine: OcrEngine, pixels: Pixels, background: RGB, origin: Box, blockBase: number): Promise<OcrWord[]> {
+async function readArea(engine: OcrEngine, pixels: Pixels, background: RGB, origin: Box, blockBase: number, progress?: (percent: number) => void): Promise<OcrWord[]> {
   const ink = inkImage(pixels, background);
   const scale = ocrScale(ink.width + 2 * PAD, ink.height + 2 * PAD);
   // Resize the ink first, then add the scaled margin (sharp executes resize
@@ -24,7 +24,7 @@ async function readArea(engine: OcrEngine, pixels: Pixels, background: RGB, orig
     width: Math.max(1, Math.round(b.width / scale)),
     height: Math.max(1, Math.round(b.height / scale)),
   });
-  return (await engine.recognize({ png, width: info.width, height: info.height })).map((word) => ({
+  return (await engine.recognize({ png, width: info.width, height: info.height }, progress)).map((word) => ({
     ...word, ...box(word), block: blockBase + word.block,
     symbols: word.symbols?.map((s) => ({ text: s.text, ...box(s) })),
   }));
@@ -36,16 +36,27 @@ export const score = (words: readonly OcrWord[]) => words.reduce((sum, w) =>
 
 /** Same ink preprocessing and per-panel score selection as the browser pipeline. */
 export async function recognizeWords(engine: OcrEngine, pixels: Pixels, progress?: Progress): Promise<OcrWord[]> {
-  progress?.("Reading text…");
+  let lastPercent = 0;
+  const report = (status: string, percent: number) => {
+    if (!Number.isFinite(percent)) return;
+    lastPercent = Math.max(lastPercent, Math.min(100, Math.max(0, percent)));
+    progress?.(status, lastPercent);
+  };
+  report("Reading text…", 0);
   const whole = { x: 0, y: 0, width: pixels.width, height: pixels.height };
-  const first = await readArea(engine, pixels, dominantColor(pixels), whole, 0);
+  // Reserve the remainder for panel re-reads, whose number is known after this pass.
+  const first = await readArea(engine, pixels, dominantColor(pixels), whole, 0, (percent) => report("Reading text…", percent * 0.4));
+  report("Reading text…", 40);
   const panels = leaves(segment(pixels, first)).filter((leaf) => leaf.words.length > 0);
-  if (panels.length < 2) return first;
+  if (panels.length < 2) { report("Reading text…", 100); return first; }
   const inPanel = new Set(panels.flatMap((p) => p.words));
   const words = first.filter((word) => !inPanel.has(word));
   for (const [i, panel] of panels.entries()) {
-    progress?.(`Reading panel ${i + 1} of ${panels.length}…`);
-    const again = await readArea(engine, cropPixels(pixels, panel.box), panel.background, panel.box, (i + 1) * 1000);
+    const status = `Reading panel ${i + 1} of ${panels.length}…`;
+    report(status, 40 + i * 60 / panels.length);
+    const again = await readArea(engine, cropPixels(pixels, panel.box), panel.background, panel.box, (i + 1) * 1000,
+      (percent) => report(status, 40 + (i + percent / 100) * 60 / panels.length));
+    report(status, 40 + (i + 1) * 60 / panels.length);
     words.push(...(score(again) > score(panel.words) ? again : panel.words));
   }
   return words;

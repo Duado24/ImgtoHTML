@@ -45,6 +45,67 @@ function gatedEngine() {
 }
 
 describe("job lifecycle", () => {
+  it("reports weighted, monotonic OCR progress and plain steps through layout and vision", async () => {
+    const started = deferred<void>();
+    const read = deferred<OcrWord[]>();
+    const layoutStarted = deferred<void>();
+    const layout = deferred<{ layout: null; attempts: [] }>();
+    const visionStarted = deferred<void>();
+    const vision = deferred<[]>();
+    unblock.push(() => { read.resolve([]); layout.resolve({ layout: null, attempts: [] }); vision.resolve([]); });
+    let report: ((percent: number) => void) | undefined;
+    const jobs = setup({ recognize: async (_image, progress) => {
+      report = progress;
+      started.resolve();
+      return read.promise;
+    } }, {
+      name: "test",
+      detectLayout: async () => { layoutStarted.resolve(); return layout.promise; },
+      analyze: async () => { visionStarted.resolve(); return vision.promise; },
+    });
+    const job = submit(jobs);
+    expect(jobs.get(job.id)).toMatchObject({ status: "queued", percent: 0, stage: "queued", step: 0, totalSteps: 5 });
+    await started.promise;
+    expect(jobs.get(job.id)).toMatchObject({ status: "running", percent: 5, stage: "read-text", step: 1 });
+    report?.(75);
+    expect(jobs.get(job.id)).toMatchObject({ percent: 20 }); // 75% of initial OCR's share.
+    report?.(10);
+    expect(jobs.get(job.id)).toMatchObject({ percent: 20 });
+    read.resolve([]);
+    await layoutStarted.promise;
+    expect(jobs.get(job.id)).toMatchObject({ percent: 55, stage: "detect-layout", step: 2 });
+    layout.resolve({ layout: null, attempts: [] });
+    await visionStarted.promise;
+    expect(jobs.get(job.id)).toMatchObject({ percent: 65, stage: "vision", step: 3 });
+    vision.resolve([]);
+    await job.settled;
+    expect(jobs.get(job.id)?.status).toBe("completed");
+    report?.(100); // A late logger event must never overwrite a terminal result.
+    expect(jobs.get(job.id)?.status).toBe("completed");
+  });
+
+  it("starts a region reread at zero and supplies the same weighted OCR progress", async () => {
+    const retryStarted = deferred<void>();
+    const reread = deferred<OcrWord[]>();
+    unblock.push(() => reread.resolve([]));
+    let report: ((percent: number) => void) | undefined;
+    const recognize = vi.fn().mockResolvedValueOnce([{ text: "hello", x: 54, y: 54, width: 30, height: 30, confidence: 40, block: 0, paragraph: 0, line: 0 }])
+      .mockImplementationOnce(async (_image, progress) => { report = progress; retryStarted.resolve(); return reread.promise; });
+    const jobs = setup({ recognize });
+    const job = submit(jobs);
+    await job.settled;
+    const finished = jobs.get(job.id);
+    expect(finished?.status).toBe("completed");
+    if (finished?.status !== "completed") throw new Error("Initial job did not finish");
+    jobs.retry(job.id, finished.result.model.regions[0]!.id);
+    expect(jobs.get(job.id)).toMatchObject({ status: "running", percent: 0, stage: "queued" });
+    await retryStarted.promise;
+    report?.(50);
+    expect(jobs.get(job.id)).toMatchObject({ percent: 15, stage: "read-text", step: 1, totalSteps: 5 });
+    reread.resolve([]);
+    await expect.poll(() => jobs.get(job.id)?.status).toBe("completed");
+  });
+
   it("cancels a queued job once without invoking its OCR or affecting other jobs", async () => {
     const engine = gatedEngine();
     const jobs = setup(engine);

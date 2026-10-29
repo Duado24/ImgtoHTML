@@ -91,8 +91,8 @@ interface Drawn { html: string; lines: string[]; words: OcrWord[] }
 /** Side-by-side items this short (text lines each) read row by row across them. */
 const SHORT = 3;
 
-/** Table columns survive conservative Canvas CSS allowlists. Narrow pages shrink the
- *  columns and cut off long lines at their panel edge: no scrollbar.
+/** Side-by-side components are flex items that wrap: on narrow pages they
+ *  stack, and their text wraps instead of being cut off.
  *  `lines`, when given, receives the text in reading order: side-by-side
  *  items of at most SHORT lines each (a name beside a badge, a row of cards)
  *  read row by row across them; taller ones (a sidebar beside an editor)
@@ -121,11 +121,16 @@ export function renderLayout(layout: VisionLayout, words: readonly OcrWord[], wi
       band.sort((a, b) => a.box.x - b.box.x);
       const cells = band.map(draw);
       if (band.length === 1) return cells[0]!;
-      const total = band.reduce((s, c) => s + c.box.width, 0);
       const all = cells.flatMap((c) => c.words);
       const short = cells.every((c) => c.lines.filter((l) => l.trim()).length <= SHORT);
       return {
-        html: '<table role="presentation" style="width:100%;table-layout:fixed;border-collapse:collapse;border:none;"><tbody><tr>' + band.map((c, i) => `<td style="width:${100 * c.box.width / total}%;vertical-align:top;padding:0;border:none;">${cells[i]!.html}</td>`).join("") + '</tr></tbody></table>',
+        html: '<div style="display:flex;flex-wrap:wrap;min-width:0;">' + band.map((c, i) => {
+          const type = "component" in c ? c.component.type : "other";
+          const sidebar = type === "sidebar";
+          const editor = type === "editor";
+          const flex = sidebar ? "flex:0 1 150px;min-width:135px;" : editor ? "flex:1 1 520px;min-width:280px;" : `flex:1 1 ${Math.round(c.box.width)}px;min-width:0;`;
+          return `<div style="${flex}max-width:100%;box-sizing:border-box;">${cells[i]!.html}</div>`;
+        }).join("") + '</div>',
         lines: short ? layoutWords(all).lines : cells.flatMap((c) => c.lines),
         words: all,
       };
@@ -138,11 +143,11 @@ export function renderLayout(layout: VisionLayout, words: readonly OcrWord[], wi
     // Without children, the component's words are its content; with them,
     // they're placed among the children.
     const body = children.length ? group(children, own, c) : own.length ? drawn(paint(own, c.box, c), own) : nothing;
-    return { ...body, html: `<div id="layout-${c.id}" style="min-width:0;overflow:hidden;${pixels ? `background-color:${rgbHex(dominantColor(pixels, c.box))};` : ""}min-height:${Math.round(c.box.height)}px;">` + body.html + '</div>' };
+    return { ...body, html: `<div id="layout-${c.id}" style="min-width:0;overflow-wrap:anywhere;${pixels ? `background-color:${rgbHex(dominantColor(pixels, c.box))};` : ""}min-height:${Math.round(c.box.height)}px;">` + body.html + '</div>' };
   }
   const root = group(layout.components.filter((c) => c.parent === null), assigned.get("\0") ?? []);
   lines?.push(...root.lines);
-  return `<div role="figure" aria-label="${escapeHtml(label)}" style="max-width:100%;overflow:hidden;"><div style="width:100%;">` + root.html + '</div>' + (caption ? `<p>${escapeHtml(caption)}</p>` : "") + '</div>';
+  return `<div role="figure" aria-label="${escapeHtml(label)}" style="max-width:100%;min-width:0;"><div style="width:100%;box-sizing:border-box;border:1px solid #2b2b2b;border-radius:0.75rem;overflow:hidden;">` + root.html + '</div>' + (caption ? `<p>${escapeHtml(caption)}</p>` : "") + '</div>';
 }
 
 const bounds = (ws: readonly OcrWord[]): Box => {

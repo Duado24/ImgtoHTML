@@ -62,53 +62,57 @@
           Convert
         </button>
         <button class="btn" id="cancel" type="button" hidden>Cancel</button>
-        <div class="progress" aria-hidden="true"><i></i></div>
-        <p class="status" id="status" role="status" aria-live="polite">Ready<span class="cursor" aria-hidden="true"></span></p>
+        <div id="conversion-progress" hidden>
+          <p class="progress-label" id="progress-label">Waiting to start — 0%</p>
+          <div class="progress" id="progress" role="progressbar" aria-label="Screenshot conversion" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><i id="progress-fill"></i></div>
+        </div>
+        <p class="status" id="status" role="status" aria-live="polite">Ready</p>
       </div>
     </form>
 
     <!-- ── Results ──────────────────────────────── -->
     <main class="panel workspace" id="workspace" aria-label="Results">
-      <div class="scan-busy" aria-hidden="true"></div>
-
       <div class="empty" id="empty">
-        <div class="scan" aria-hidden="true"></div>
         <span class="big">No conversion yet</span>
         Choose a screenshot, describe it, and press Convert.<br>
         Results appear here: preview, Canvas HTML and an editable transcript.
       </div>
 
       <div id="results" hidden>
-        <div class="stats">
-          <div class="stat"><p class="label">Lines</p><div class="v" id="s-lines">–</div></div>
-          <div class="stat"><p class="label">Low confidence</p><div class="v" id="s-low">–</div></div>
-          <div class="stat"><p class="label">Contrast</p><div class="v"><span id="s-contrast">–</span><small>:1</small></div></div>
-          <div class="stat"><p class="label">Colors</p>
-            <div class="swatches"><span class="sw" id="sw-bg"></span><span id="t-bg"></span></div>
-            <div class="swatches"><span class="sw" id="sw-fg"></span><span id="t-fg"></span></div>
-          </div>
-        </div>
-
-        <div class="decisions" aria-label="Conversion decisions">
-          <p id="layout-status"></p>
-          <div id="vision-corrections" hidden>
-            <p>Vision text corrections:</p>
-            <ul id="correction-list"></ul>
-          </div>
-        </div>
-        <ul class="issues" id="issues" aria-label="Review notes"></ul>
-
-        <section class="review" id="review" aria-labelledby="review-title" hidden>
+        <section class="review" id="review" aria-labelledby="review-title">
           <div class="review-head">
-            <p class="label" id="review-title">Review <span id="review-count"></span></p>
-            <button class="btn" id="skip-all" type="button">Skip all</button>
+            <h2 id="review-title">Ready to paste</h2>
+            <p class="words-to-check"><strong id="s-low">0</strong> Words to check</p>
           </div>
+          <div class="review-head">
+            <p id="review-count" role="status">0 of 0 checked</p>
+            <button class="btn" id="skip-all" type="button">Skip the rest for now</button>
+          </div>
+          <div class="review-progress" id="review-progress" role="progressbar" aria-label="Items checked" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="review-progress-fill"></i></div>
+          <p class="help" id="review-skipped" hidden></p>
           <ol class="regions" id="regions"></ol>
         </section>
 
-        <div class="files" id="files">
-          <span class="meta">Save</span>
-        </div>
+        <div class="files" id="files"><span class="meta">Save</span></div>
+
+        <details class="technical" id="technical">
+          <summary>Technical details</summary>
+          <div class="stats">
+            <div class="stat"><p class="label">Lines</p><div class="v" id="s-lines">–</div></div>
+            <div class="stat"><p class="label">Contrast</p><div class="v"><span id="s-contrast">–</span><small>:1</small></div></div>
+            <div class="stat"><p class="label">Colors</p>
+              <div class="swatches"><span class="sw" id="sw-bg"></span><span id="t-bg"></span></div>
+              <div class="swatches"><span class="sw" id="sw-fg"></span><span id="t-fg"></span></div>
+            </div>
+          </div>
+          <div class="decisions" aria-label="Conversion details">
+            <p id="layout-status"></p>
+            <div id="vision-corrections" hidden><p>Text corrections:</p><ul id="correction-list"></ul></div>
+          </div>
+          <ul class="issues" id="issues" aria-label="Conversion notes"></ul>
+          <ul class="region-details" id="region-details"></ul>
+          <div class="files" id="technical-files"><span class="meta">Data files</span></div>
+        </details>
 
         <div class="tabs" role="tablist" aria-label="Result views">
           <button role="tab" id="t-preview" aria-controls="p-preview" aria-selected="true">Preview</button>
@@ -124,7 +128,7 @@
             </div>
           </div>
           <div class="compare" id="compare">
-            <div class="frame"><p class="label" id="orig-label">Original</p><div class="overlay"><img id="orig" alt="The original screenshot, for comparison"><div class="boxes" id="boxes" aria-hidden="true"></div></div></div>
+            <div class="frame"><p class="label" id="orig-label">Original</p><div class="overlay"><img id="orig" alt="The original screenshot, for comparison"><div class="boxes" id="boxes" aria-label="Places to check in the original screenshot"></div></div></div>
             <div class="frame"><p class="label">HTML in a Canvas-like page</p><iframe id="render" title="Rendered HTML preview"></iframe></div>
           </div>
         </section>
