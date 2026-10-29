@@ -20,7 +20,7 @@
   {
     "file": "batch-1/4.3ErrorRun.gif",
     "kind": "terminal",
-    "seconds": 0.4,
+    "seconds": 0.5,
     "lowConfidence": 0,
     "regions": 1,
     "flaggedRegions": 0,
@@ -38,7 +38,7 @@
   {
     "file": "batch-1/4.3ExampleRun.gif",
     "kind": "terminal",
-    "seconds": 0.4,
+    "seconds": 0.5,
     "lowConfidence": 1,
     "regions": 1,
     "flaggedRegions": 1,
@@ -164,7 +164,7 @@
   {
     "file": "batch-1/ChatGPT Image Nov 10, 2025, 08_31_23 AM.png",
     "kind": "terminal",
-    "seconds": 1.7,
+    "seconds": 1.8,
     "lowConfidence": 4,
     "regions": 1,
     "flaggedRegions": 1,
@@ -218,7 +218,7 @@
   {
     "file": "batch-1/Digital IO Connection Troubleshooting.png",
     "kind": "terminal",
-    "seconds": 3.8,
+    "seconds": 3.6,
     "lowConfidence": 10,
     "regions": 277,
     "flaggedRegions": 9,
@@ -344,7 +344,7 @@
   {
     "file": "batch-1/Git log oneline.png",
     "kind": "terminal",
-    "seconds": 0.3,
+    "seconds": 0.2,
     "lowConfidence": 5,
     "regions": 1,
     "flaggedRegions": 1,
@@ -380,7 +380,7 @@
   {
     "file": "batch-1/Github Classroom 13.png",
     "kind": "terminal",
-    "seconds": 0.7,
+    "seconds": 0.6,
     "lowConfidence": 29,
     "regions": 2,
     "flaggedRegions": 2,
@@ -596,7 +596,7 @@
   {
     "file": "batch-2/GitRepoFlowchart5-1.png",
     "kind": "terminal",
-    "seconds": 0.3,
+    "seconds": 0.4,
     "lowConfidence": 3,
     "regions": 1,
     "flaggedRegions": 1,
@@ -812,7 +812,7 @@
   {
     "file": "batch-2/image-1e72988d-ebbd-419b-906f-3291f26ced3e.png",
     "kind": "terminal",
-    "seconds": 1.3,
+    "seconds": 1.2,
     "lowConfidence": 21,
     "regions": 5,
     "flaggedRegions": 3,
@@ -848,7 +848,7 @@
   {
     "file": "batch-2/image-3.png",
     "kind": "terminal",
-    "seconds": 0.9,
+    "seconds": 0.5,
     "lowConfidence": 2,
     "regions": 1,
     "flaggedRegions": 1,
@@ -992,7 +992,7 @@
   {
     "file": "batch-3/image-40de22be-8853-468b-9fba-130da42f8516.png",
     "kind": "terminal",
-    "seconds": 0.9,
+    "seconds": 1,
     "lowConfidence": 6,
     "regions": 1,
     "flaggedRegions": 1,
@@ -1082,7 +1082,7 @@
   {
     "file": "batch-3/image-506fb7e1-adce-4072-9a92-7f0cf8202364.png",
     "kind": "terminal",
-    "seconds": 2.1,
+    "seconds": 1.4,
     "lowConfidence": 36,
     "regions": 2,
     "flaggedRegions": 2,
@@ -1118,7 +1118,7 @@
   {
     "file": "batch-3/image-54eca947-007c-4797-8ea2-bc2a6bc764c0.png",
     "kind": "terminal",
-    "seconds": 1.3,
+    "seconds": 1.4,
     "lowConfidence": 10,
     "regions": 1,
     "flaggedRegions": 1,
@@ -1208,7 +1208,7 @@
   {
     "file": "batch-3/image-6d826d92-aced-4467-a87d-50e33eddd76a.png",
     "kind": "terminal",
-    "seconds": 0.2,
+    "seconds": 0.1,
     "lowConfidence": 0,
     "regions": 1,
     "flaggedRegions": 1,
@@ -1406,7 +1406,7 @@
   {
     "file": "batch-4/NewAssigmentLocation.png",
     "kind": "terminal",
-    "seconds": 3,
+    "seconds": 0.4,
     "lowConfidence": 11,
     "regions": 1,
     "flaggedRegions": 1,
@@ -1419,7 +1419,7 @@
     "layoutReason": "the model's layout was rejected: no usable answer: Unterminated string in JSON at position 8392 (line 425 column 18)",
     "layout": null,
     "unsupported": [],
-    "vision": "saved"
+    "vision": "missing"
   },
   {
     "file": "batch-4/NewClassroom.png",
@@ -1460,7 +1460,7 @@
   {
     "file": "batch-4/image-c449f286-1dbf-45b1-8297-3eb95a06e8d3.png",
     "kind": "terminal",
-    "seconds": 0.5,
+    "seconds": 0.6,
     "lowConfidence": 15,
     "regions": 1,
     "flaggedRegions": 1,
@@ -1530,27 +1530,9 @@
     "vision": "saved"
   },
   {
-    "file": "batch-4/image-d86ddfa2-db7d-477f-9c9a-d9fa4527de30.png",
-    "kind": "terminal",
-    "seconds": 0.5,
-    "lowConfidence": 15,
-    "regions": 1,
-    "flaggedRegions": 1,
-    "flags": 26,
-    "canvasErrors": [],
-    "canvasWarnings": [],
-    "text": null,
-    "textFrom": "transcript",
-    "renderer": "rows",
-    "layoutReason": "\"terminal\" screenshots use the terminal renderer",
-    "layout": null,
-    "unsupported": [],
-    "vision": "saved"
-  },
-  {
     "file": "batch-4/image-db4de849-bbd7-44fd-9771-e300a70946b9.png",
     "kind": "terminal",
-    "seconds": 3.7,
+    "seconds": 3.8,
     "lowConfidence": 25,
     "regions": 7,
     "flaggedRegions": 5,
@@ -1584,27 +1566,9 @@
     "vision": "saved"
   },
   {
-    "file": "batch-4/image-f0fdc73e-9a31-4998-9ead-c9484c5e0d1e.png",
-    "kind": "terminal",
-    "seconds": 0.2,
-    "lowConfidence": 0,
-    "regions": 1,
-    "flaggedRegions": 0,
-    "flags": 0,
-    "canvasErrors": [],
-    "canvasWarnings": [],
-    "text": null,
-    "textFrom": "transcript",
-    "renderer": "rows",
-    "layoutReason": "the model's layout was rejected: invalid component id \"math.txt\"",
-    "layout": null,
-    "unsupported": [],
-    "vision": "saved"
-  },
-  {
     "file": "batch-4/image-fc3fb753-68fe-4d85-b4a0-dc5da5c09843.png",
     "kind": "terminal",
-    "seconds": 0.4,
+    "seconds": 0.5,
     "lowConfidence": 2,
     "regions": 1,
     "flaggedRegions": 1,
@@ -1676,7 +1640,7 @@
   {
     "file": "batch-4/neofetch.gif",
     "kind": "terminal",
-    "seconds": 4.1,
+    "seconds": 1.3,
     "lowConfidence": 29,
     "regions": 1,
     "flaggedRegions": 1,
@@ -1689,7 +1653,7 @@
     "layoutReason": "\"terminal\" screenshots use the terminal renderer",
     "layout": null,
     "unsupported": [],
-    "vision": "saved"
+    "vision": "missing"
   },
   {
     "file": "batch-4/ok, don't show again 13.3.png",
@@ -1728,24 +1692,6 @@
     "vision": "saved"
   },
   {
-    "file": "batch-4/pi instructions.02.png",
-    "kind": "terminal",
-    "seconds": 0.9,
-    "lowConfidence": 0,
-    "regions": 2,
-    "flaggedRegions": 0,
-    "flags": 0,
-    "canvasErrors": [],
-    "canvasWarnings": [],
-    "text": null,
-    "textFrom": "transcript",
-    "renderer": "layout",
-    "layoutReason": null,
-    "layout": null,
-    "unsupported": [],
-    "vision": "saved"
-  },
-  {
     "file": "batch-4/pi instructions.03.2.png",
     "kind": "terminal",
     "seconds": 1,
@@ -1766,25 +1712,7 @@
   {
     "file": "batch-4/pi instructions.04-1.png",
     "kind": "terminal",
-    "seconds": 3.4,
-    "lowConfidence": 20,
-    "regions": 2,
-    "flaggedRegions": 2,
-    "flags": 34,
-    "canvasErrors": [],
-    "canvasWarnings": [],
-    "text": null,
-    "textFrom": "transcript",
-    "renderer": "rows",
-    "layoutReason": "the model's layout was rejected: tab-general: outside its parent content-area",
-    "layout": null,
-    "unsupported": [],
-    "vision": "saved"
-  },
-  {
-    "file": "batch-4/pi instructions.04.png",
-    "kind": "terminal",
-    "seconds": 3.4,
+    "seconds": 3.3,
     "lowConfidence": 20,
     "regions": 2,
     "flaggedRegions": 2,
@@ -1801,7 +1729,7 @@
   },
   {
     "file": "batch-5/PickAssigments.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 0.5,
     "lowConfidence": 16,
     "regions": 1,
@@ -1811,8 +1739,9 @@
     "canvasWarnings": [],
     "text": {
       "cer": 0.48226950354609927,
-      "cerIgnoringSpaces": 0.2936936936936937,
+      "cerIgnoringSpaces": 0.2918918918918919,
       "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0.6875,
       "confusable": [
         "o→∅",
         "l→∅",
@@ -1866,8 +1795,8 @@
   },
   {
     "file": "batch-5/Programming Lifecycle.png",
-    "kind": "terminal",
-    "seconds": 3.4,
+    "kind": "diagram",
+    "seconds": 2.8,
     "lowConfidence": 1,
     "regions": 1,
     "flaggedRegions": 1,
@@ -1875,23 +1804,22 @@
     "canvasErrors": [],
     "canvasWarnings": [],
     "text": {
-      "cer": 0.9692307692307692,
-      "cerIgnoringSpaces": 0.8,
+      "cer": 1.0923076923076922,
+      "cerIgnoringSpaces": 0.7846153846153846,
       "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0,
       "confusable": [
-        "1→∅",
-        ".→∅",
+        "1→h",
+        ".→e",
         "d→o",
         "⏎→i",
         "2→n",
         ".→g",
         "l→∅",
-        "n→i",
-        ".→c",
+        "3→i",
+        ".→f",
         "B→c",
-        "u→l",
-        "i→e",
-        "l→⏎",
+        "i→c",
         "␠→S",
         "5→2",
         "u→l",
@@ -1899,16 +1827,16 @@
         "e→l"
       ]
     },
-    "textFrom": "lifecycle-diagram",
-    "renderer": "layout",
-    "layoutReason": null,
+    "textFrom": "transcript",
+    "renderer": "rows",
+    "layoutReason": "diagrams are described, not laid out",
     "layout": null,
-    "unsupported": [],
+    "unsupported": null,
     "vision": "saved"
   },
   {
     "file": "batch-5/ReUseAssigment.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 0.4,
     "lowConfidence": 11,
     "regions": 1,
@@ -1918,8 +1846,9 @@
     "canvasWarnings": [],
     "text": {
       "cer": 0.5447154471544715,
-      "cerIgnoringSpaces": 0.39662447257383965,
+      "cerIgnoringSpaces": 0.4008438818565401,
       "lineAccuracy": 0.42857142857142855,
+      "lineAccuracyIgnoringSpaces": 0.6428571428571429,
       "confusable": [
         "2→␠",
         ":→∅",
@@ -1931,19 +1860,21 @@
         "∅→~",
         "i→∅",
         "e→S",
-        "u→2",
-        "s→2",
-        "e→0",
-        "␠→-",
+        "␠→2",
+        "A→2",
+        "s→0",
         "s→-",
-        "i→0",
-        "n→S",
-        "t→2",
-        "⏎→2",
-        "A→0",
-        "r→-",
-        "i→-",
-        "v→0",
+        "i→C",
+        "n→-",
+        "m→0",
+        "⏎→S",
+        "A→2",
+        "r→2",
+        "c→0",
+        "h→-",
+        "i→C",
+        "e→-",
+        "⏎→0",
         "7→5",
         "S→a",
         "2→t",
@@ -1971,8 +1902,8 @@
   },
   {
     "file": "batch-5/SampleFlowchart.png",
-    "kind": "terminal",
-    "seconds": 2.3,
+    "kind": "diagram",
+    "seconds": 1.9,
     "lowConfidence": 0,
     "regions": 1,
     "flaggedRegions": 0,
@@ -1981,50 +1912,52 @@
     "canvasWarnings": [],
     "text": {
       "cer": 0.6428571428571429,
-      "cerIgnoringSpaces": 0.6190476190476191,
+      "cerIgnoringSpaces": 0.6904761904761905,
       "lineAccuracy": 0.6666666666666666,
+      "lineAccuracyIgnoringSpaces": 0.6666666666666666,
       "confusable": [
         "S→∅",
         "i→∅",
+        "o→∅",
+        "i→∅",
         "i→∅",
         "o→∅",
         "i→∅",
-        "o→∅",
-        "i→⏎",
-        "o→⏎"
+        "o→∅"
       ]
     },
     "textFrom": "transcript",
-    "renderer": "layout",
-    "layoutReason": null,
+    "renderer": "rows",
+    "layoutReason": "diagrams are described, not laid out",
     "layout": null,
-    "unsupported": [],
+    "unsupported": null,
     "vision": "saved"
   },
   {
     "file": "batch-5/Screenshot 2024-03-05 at 10.27.12 AM.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 2.5,
     "lowConfidence": 14,
     "regions": 6,
-    "flaggedRegions": 5,
-    "flags": 24,
+    "flaggedRegions": 4,
+    "flags": 20,
     "canvasErrors": [],
     "canvasWarnings": [],
     "text": {
       "cer": 1.854054054054054,
-      "cerIgnoringSpaces": 0.2644320297951583,
+      "cerIgnoringSpaces": 0.23277467411545624,
       "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0.13333333333333333,
       "confusable": [
         "l→∅",
         "o→4",
         "o→\\",
         "∅→|",
         "∅→|",
-        "S→⏎",
-        "2→⏎",
-        "2→⏎",
-        "0→⏎",
+        "S→∅",
+        "2→∅",
+        "2→∅",
+        "0→∅",
         "i→∅",
         "∅→0",
         "∅→o",
@@ -2061,7 +1994,7 @@
       ]
     },
     "textFrom": "transcript",
-    "renderer": "rows",
+    "renderer": "panels",
     "layoutReason": "the model's layout was rejected: siblings breadcrumb and main-content overlap",
     "layout": null,
     "unsupported": [],
@@ -2069,7 +2002,7 @@
   },
   {
     "file": "batch-5/Screenshot 2024-03-05 at 10.32.07 AM.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 1.6,
     "lowConfidence": 6,
     "regions": 2,
@@ -2079,8 +2012,9 @@
     "canvasWarnings": [],
     "text": {
       "cer": 0.6778947368421052,
-      "cerIgnoringSpaces": 0.35267857142857145,
+      "cerIgnoringSpaces": 0.3392857142857143,
       "lineAccuracy": 0.11764705882352941,
+      "lineAccuracyIgnoringSpaces": 0.17647058823529413,
       "confusable": [
         "S→∅",
         "2→∅",
@@ -2090,12 +2024,11 @@
         "-→∅",
         "0→∅",
         "1→A",
-        "l→v",
-        "⏎→i",
-        "i→(",
-        "o→∅",
-        "l→i",
-        "o→t",
+        "l→∅",
+        "o→(",
+        "l→E",
+        "o→d",
+        "a→i",
         "0→A",
         "o→e",
         "5→s",
@@ -2113,12 +2046,10 @@
         "i→d",
         "o→e",
         "S→s",
-        "s→5",
         "5→∅",
-        "5→∅",
-        "␠→—",
-        "P→—",
-        "a→—",
+        "s→—",
+        "e→—",
+        "d→—",
         "∅→~",
         "∅→~"
       ]
@@ -2132,8 +2063,8 @@
   },
   {
     "file": "batch-5/Screenshot 2024-03-05 at 10.33.32 AM.png",
-    "kind": "terminal",
-    "seconds": 0.2,
+    "kind": "interface",
+    "seconds": 0.3,
     "lowConfidence": 4,
     "regions": 1,
     "flaggedRegions": 1,
@@ -2144,6 +2075,7 @@
       "cer": 4.84375,
       "cerIgnoringSpaces": 0.3448275862068966,
       "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0,
       "confusable": [
         "∅→o",
         "∅→-",
@@ -2159,7 +2091,7 @@
   },
   {
     "file": "batch-5/Screenshot 2024-03-05 at 10.37.08 AM.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 0.3,
     "lowConfidence": 7,
     "regions": 1,
@@ -2171,6 +2103,7 @@
       "cer": 1.1958762886597938,
       "cerIgnoringSpaces": 0.16470588235294117,
       "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0,
       "confusable": [
         "∅→o",
         "1→X",
@@ -2187,7 +2120,7 @@
   },
   {
     "file": "batch-5/Screenshot 2024-05-06 at 10.34.02 PM.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 2.6,
     "lowConfidence": 5,
     "regions": 2,
@@ -2197,15 +2130,16 @@
     "canvasWarnings": [],
     "text": {
       "cer": 0.6568364611260054,
-      "cerIgnoringSpaces": 0.1355421686746988,
+      "cerIgnoringSpaces": 0.06626506024096386,
       "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0.6,
       "confusable": [
         "∅→o",
         "S→s"
       ]
     },
     "textFrom": "transcript",
-    "renderer": "rows",
+    "renderer": "panels",
     "layoutReason": "the model's layout was rejected: tab-general: outside its parent tab-container",
     "layout": null,
     "unsupported": [],
@@ -2213,18 +2147,19 @@
   },
   {
     "file": "batch-5/Screenshot 2024-08-19 at 10.45.54 AM.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 0.2,
     "lowConfidence": 2,
     "regions": 1,
     "flaggedRegions": 1,
-    "flags": 4,
+    "flags": 3,
     "canvasErrors": [],
     "canvasWarnings": [],
     "text": {
       "cer": 0.8913043478260869,
-      "cerIgnoringSpaces": 0.2032520325203252,
+      "cerIgnoringSpaces": 0.17073170731707318,
       "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0,
       "confusable": [
         "∅→o",
         "∅→i"
@@ -2239,28 +2174,29 @@
   },
   {
     "file": "batch-5/Screenshot 2024-08-19 at 10.54.42 AM.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 1.2,
     "lowConfidence": 5,
     "regions": 3,
     "flaggedRegions": 2,
-    "flags": 7,
+    "flags": 5,
     "canvasErrors": [],
     "canvasWarnings": [],
     "text": {
       "cer": 1.445945945945946,
-      "cerIgnoringSpaces": 0.20588235294117646,
+      "cerIgnoringSpaces": 0.13970588235294118,
       "lineAccuracy": 0.16666666666666666,
+      "lineAccuracyIgnoringSpaces": 0.5,
       "confusable": [
         "∅→o",
-        "S→⏎",
-        "1→⏎",
-        "0→⏎",
-        "5→⏎"
+        "S→∅",
+        "1→∅",
+        "0→∅",
+        "5→∅"
       ]
     },
     "textFrom": "transcript",
-    "renderer": "rows",
+    "renderer": "panels",
     "layoutReason": "the model's layout was rejected: update-button: outside its parent roster-section",
     "layout": null,
     "unsupported": [],
@@ -2268,8 +2204,8 @@
   },
   {
     "file": "batch-5/pi instructions.05-1.png",
-    "kind": "terminal",
-    "seconds": 2.1,
+    "kind": "interface",
+    "seconds": 2.2,
     "lowConfidence": 4,
     "regions": 2,
     "flaggedRegions": 2,
@@ -2278,49 +2214,24 @@
     "canvasWarnings": [],
     "text": {
       "cer": 1.85,
-      "cerIgnoringSpaces": 0.2894736842105263,
+      "cerIgnoringSpaces": 0.10526315789473684,
       "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0.8333333333333334,
       "confusable": [
         "∅→\"",
         "∅→0"
       ]
     },
     "textFrom": "transcript",
-    "renderer": "rows",
+    "renderer": "panels",
     "layoutReason": "the model's layout was rejected: tab_container: outside its parent content_area",
     "layout": null,
     "unsupported": [],
     "vision": "saved"
   },
   {
-    "file": "batch-5/pi instructions.05.png",
-    "kind": "terminal",
-    "seconds": 2.1,
-    "lowConfidence": 4,
-    "regions": 2,
-    "flaggedRegions": 2,
-    "flags": 4,
-    "canvasErrors": [],
-    "canvasWarnings": [],
-    "text": {
-      "cer": 1.85,
-      "cerIgnoringSpaces": 0.2894736842105263,
-      "lineAccuracy": 0,
-      "confusable": [
-        "∅→\"",
-        "∅→0"
-      ]
-    },
-    "textFrom": "transcript",
-    "renderer": "rows",
-    "layoutReason": "the model's layout was rejected: no usable answer: Unexpected end of JSON input",
-    "layout": null,
-    "unsupported": [],
-    "vision": "saved"
-  },
-  {
     "file": "batch-5/pi instructions.06-1.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 0.9,
     "lowConfidence": 0,
     "regions": 2,
@@ -2330,34 +2241,9 @@
     "canvasWarnings": [],
     "text": {
       "cer": 0.5555555555555556,
-      "cerIgnoringSpaces": 0.11403508771929824,
+      "cerIgnoringSpaces": 0.06140350877192982,
       "lineAccuracy": 0,
-      "confusable": [
-        "S→∅",
-        "O→∅"
-      ]
-    },
-    "textFrom": "transcript",
-    "renderer": "layout",
-    "layoutReason": null,
-    "layout": null,
-    "unsupported": [],
-    "vision": "saved"
-  },
-  {
-    "file": "batch-5/pi instructions.06.png",
-    "kind": "terminal",
-    "seconds": 0.9,
-    "lowConfidence": 0,
-    "regions": 2,
-    "flaggedRegions": 0,
-    "flags": 0,
-    "canvasErrors": [],
-    "canvasWarnings": [],
-    "text": {
-      "cer": 0.5555555555555556,
-      "cerIgnoringSpaces": 0.11403508771929824,
-      "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0.6666666666666666,
       "confusable": [
         "S→∅",
         "O→∅"
@@ -2372,7 +2258,7 @@
   },
   {
     "file": "batch-5/pi instructions.07-1.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 0.4,
     "lowConfidence": 0,
     "regions": 2,
@@ -2384,34 +2270,7 @@
       "cer": 0.192,
       "cerIgnoringSpaces": 0.15126050420168066,
       "lineAccuracy": 0.25,
-      "confusable": [
-        "i→∅",
-        "'→’",
-        "O→∅",
-        "S→∅"
-      ]
-    },
-    "textFrom": "transcript",
-    "renderer": "layout",
-    "layoutReason": null,
-    "layout": null,
-    "unsupported": [],
-    "vision": "saved"
-  },
-  {
-    "file": "batch-5/pi instructions.07.png",
-    "kind": "terminal",
-    "seconds": 0.4,
-    "lowConfidence": 0,
-    "regions": 2,
-    "flaggedRegions": 1,
-    "flags": 1,
-    "canvasErrors": [],
-    "canvasWarnings": [],
-    "text": {
-      "cer": 0.192,
-      "cerIgnoringSpaces": 0.15126050420168066,
-      "lineAccuracy": 0.25,
+      "lineAccuracyIgnoringSpaces": 0.25,
       "confusable": [
         "i→∅",
         "'→’",
@@ -2428,8 +2287,8 @@
   },
   {
     "file": "batch-5/pi instructions.08-1.png",
-    "kind": "terminal",
-    "seconds": 3.3,
+    "kind": "interface",
+    "seconds": 0.4,
     "lowConfidence": 2,
     "regions": 1,
     "flaggedRegions": 1,
@@ -2438,11 +2297,12 @@
     "canvasWarnings": [],
     "text": {
       "cer": 0.6422764227642277,
-      "cerIgnoringSpaces": 0.15,
+      "cerIgnoringSpaces": 0.10833333333333334,
       "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0.6666666666666666,
       "confusable": [
         "∅→,",
-        "l→⏎"
+        "l→∅"
       ]
     },
     "textFrom": "transcript",
@@ -2450,48 +2310,23 @@
     "layoutReason": "the model's layout was rejected: siblings subtitle and title overlap",
     "layout": null,
     "unsupported": [],
-    "vision": "saved"
-  },
-  {
-    "file": "batch-5/pi instructions.08.png",
-    "kind": "terminal",
-    "seconds": 3.1,
-    "lowConfidence": 2,
-    "regions": 1,
-    "flaggedRegions": 1,
-    "flags": 2,
-    "canvasErrors": [],
-    "canvasWarnings": [],
-    "text": {
-      "cer": 0.6422764227642277,
-      "cerIgnoringSpaces": 0.15,
-      "lineAccuracy": 0,
-      "confusable": [
-        "∅→,",
-        "l→⏎"
-      ]
-    },
-    "textFrom": "transcript",
-    "renderer": "rows",
-    "layoutReason": "the model's layout was rejected: siblings cancel_button and ok_button overlap",
-    "layout": null,
-    "unsupported": [],
-    "vision": "saved"
+    "vision": "missing"
   },
   {
     "file": "batch-5/pi instructions.09-1.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 0.3,
     "lowConfidence": 0,
     "regions": 1,
-    "flaggedRegions": 1,
-    "flags": 4,
+    "flaggedRegions": 0,
+    "flags": 0,
     "canvasErrors": [],
     "canvasWarnings": [],
     "text": {
       "cer": 0.49473684210526314,
-      "cerIgnoringSpaces": 0.11956521739130435,
+      "cerIgnoringSpaces": 0.09782608695652174,
       "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0,
       "confusable": [
         "∅→|",
         "a→|",
@@ -2507,36 +2342,8 @@
     "vision": "saved"
   },
   {
-    "file": "batch-5/pi instructions.09.png",
-    "kind": "terminal",
-    "seconds": 0.3,
-    "lowConfidence": 0,
-    "regions": 1,
-    "flaggedRegions": 1,
-    "flags": 4,
-    "canvasErrors": [],
-    "canvasWarnings": [],
-    "text": {
-      "cer": 0.49473684210526314,
-      "cerIgnoringSpaces": 0.11956521739130435,
-      "lineAccuracy": 0,
-      "confusable": [
-        "∅→|",
-        "a→|",
-        "∅→|",
-        "’→'"
-      ]
-    },
-    "textFrom": "transcript",
-    "renderer": "rows",
-    "layoutReason": "the model's layout was rejected: hand-icon: outside its parent icon-container",
-    "layout": null,
-    "unsupported": [],
-    "vision": "saved"
-  },
-  {
     "file": "batch-5/pi instructions.11-1.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 2,
     "lowConfidence": 4,
     "regions": 2,
@@ -2548,6 +2355,7 @@
       "cer": 0.7783251231527094,
       "cerIgnoringSpaces": 0.518324607329843,
       "lineAccuracy": 0.16666666666666666,
+      "lineAccuracyIgnoringSpaces": 0.5,
       "confusable": [
         "∅→|",
         "∅→S",
@@ -2587,61 +2395,8 @@
     "vision": "saved"
   },
   {
-    "file": "batch-5/pi instructions.11.png",
-    "kind": "terminal",
-    "seconds": 2,
-    "lowConfidence": 4,
-    "regions": 2,
-    "flaggedRegions": 2,
-    "flags": 6,
-    "canvasErrors": [],
-    "canvasWarnings": [],
-    "text": {
-      "cer": 1.0985221674876848,
-      "cerIgnoringSpaces": 0.5602094240837696,
-      "lineAccuracy": 0,
-      "confusable": [
-        "∅→|",
-        "∅→8",
-        "∅→S",
-        "∅→O",
-        "a→I",
-        "∅→|",
-        "i→⏎",
-        "S→∅",
-        "B→∅",
-        "I→∅",
-        "Z→∅",
-        "O→∅",
-        "2→∅",
-        "S→∅",
-        "B→∅",
-        "I→∅",
-        "O→∅",
-        "S→∅",
-        "2→∅",
-        "-→∅",
-        "B→∅",
-        "I→∅",
-        "-→∅",
-        "S→∅",
-        "B→∅",
-        "S→∅",
-        "O→∅",
-        "I→∅",
-        "I→⏎"
-      ]
-    },
-    "textFrom": "transcript",
-    "renderer": "rows",
-    "layoutReason": "the model's layout was rejected: logo: outside its parent logo-container",
-    "layout": null,
-    "unsupported": [],
-    "vision": "saved"
-  },
-  {
     "file": "batch-5/pi instructions.12-1.png",
-    "kind": "terminal",
+    "kind": "interface",
     "seconds": 2.1,
     "lowConfidence": 3,
     "regions": 2,
@@ -2651,46 +2406,19 @@
     "canvasWarnings": [],
     "text": {
       "cer": 0.6836734693877551,
-      "cerIgnoringSpaces": 0.17616580310880828,
+      "cerIgnoringSpaces": 0.14507772020725387,
       "lineAccuracy": 0,
+      "lineAccuracyIgnoringSpaces": 0.2857142857142857,
       "confusable": [
         "∅→S",
         "i→∅",
-        "S→⏎",
+        "S→∅",
         "l→A"
       ]
     },
     "textFrom": "transcript",
-    "renderer": "rows",
+    "renderer": "panels",
     "layoutReason": "the model's layout was rejected: dialog_title_bar: outside its parent success_dialog",
-    "layout": null,
-    "unsupported": [],
-    "vision": "saved"
-  },
-  {
-    "file": "batch-5/pi instructions.12.png",
-    "kind": "terminal",
-    "seconds": 2.1,
-    "lowConfidence": 3,
-    "regions": 2,
-    "flaggedRegions": 2,
-    "flags": 3,
-    "canvasErrors": [],
-    "canvasWarnings": [],
-    "text": {
-      "cer": 0.6836734693877551,
-      "cerIgnoringSpaces": 0.17616580310880828,
-      "lineAccuracy": 0,
-      "confusable": [
-        "∅→S",
-        "i→∅",
-        "S→⏎",
-        "l→A"
-      ]
-    },
-    "textFrom": "transcript",
-    "renderer": "rows",
-    "layoutReason": "the model's layout was rejected: siblings logo_and_title and window_title overlap",
     "layout": null,
     "unsupported": [],
     "vision": "saved"
@@ -2698,7 +2426,7 @@
   {
     "file": "code/vscode-package-json.png",
     "kind": "code",
-    "seconds": 1.5,
+    "seconds": 1.4,
     "lowConfidence": 27,
     "regions": 3,
     "flaggedRegions": 2,
@@ -2709,6 +2437,7 @@
       "cer": 0.0016366612111292963,
       "cerIgnoringSpaces": 0.0017699115044247787,
       "lineAccuracy": 0.9375,
+      "lineAccuracyIgnoringSpaces": 0.9375,
       "confusable": [
         ",→∅"
       ]

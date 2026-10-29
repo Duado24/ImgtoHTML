@@ -13,6 +13,7 @@
  *  layout matches its marked boxes less well, it shows more made-up words,
  *  or a new Canvas error appeared, so it can guard changes. */
 
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, relative, sep } from "node:path";
@@ -154,9 +155,19 @@ const ollama = new OllamaVisionModel();
 const live = (await ollama.available()) ? ollama : null;
 if (!live) console.log("Ollama isn't running: screenshots without saved vision answers run without them.");
 const entries: Entry[] = [];
+// The same screenshot saved twice would count twice in the means: score it once.
+const seen = new Map<string, string>();
+const duplicates: string[] = [];
 try {
   for (const path of files) {
     const file = relative(FIXTURES, path).split(sep).join("/");
+    const bytes = await readFile(path);
+    const hash = createHash("sha256").update(bytes).digest("hex");
+    if (seen.has(hash)) {
+      duplicates.push(`${file} (same as ${seen.get(hash)})`);
+      continue;
+    }
+    seen.set(hash, file);
     const meta = JSON.parse((await sidecar(path, ".json")) ?? "{}") as { kind?: string; label?: string };
     const expected = await sidecar(path, ".txt");
     const marked = await sidecar(path, ".layout.json");
@@ -164,7 +175,7 @@ try {
     const kind = kindOf(path, meta);
     const vision = new SavedVision(live, saved ? JSON.parse(saved) : {});
     const started = performance.now();
-    const image = await decodeImage(await readFile(path), basename(path));
+    const image = await decodeImage(bytes, basename(path));
     // One job per screenshot, exactly as the server runs it.
     const jobs = new Jobs(engine, vision, null);
     const id = jobs.submit({ fileName: basename(path), kind, label: meta.label }, image, () => {});
@@ -218,8 +229,8 @@ const regressions: string[] = [];
 console.table(
   entries.map((e) => {
     const old = before.get(e.file);
-    // Gate on letters, not spacing: expected .txt files often space columns
-    // differently from the screenshot, which makes exact CER noisy.
+    // Gate on letters, not spacing: expected .txt files often space columns,
+    // indent and break lines differently from the screenshot, which makes exact CER noisy.
     const delta = e.text && old?.text ? e.text.cerIgnoringSpaces - old.text.cerIgnoringSpaces : null;
     if (delta !== null && delta > TOLERANCE) {
       regressions.push(`${e.file}: CER ignoring spaces ${pct(old!.text!.cerIgnoringSpaces)} → ${pct(e.text!.cerIgnoringSpaces)}`);
@@ -240,6 +251,7 @@ console.table(
       "CER no spaces": e.text ? pct(e.text.cerIgnoringSpaces) : "-",
       "vs base": delta === null ? "" : `${delta > 0 ? "+" : ""}${pct(delta)}`,
       CER: e.text ? pct(e.text.cer) : "-",
+      "lines no spaces": e.text ? pct(e.text.lineAccuracyIgnoringSpaces) : "-",
       "lines exact": e.text ? pct(e.text.lineAccuracy) : "-",
       confusable: e.text?.confusable?.length ?? "-",
       "layout": e.layout ? pct(e.layout.meanIoU) : "-",
@@ -253,11 +265,19 @@ console.table(
   }),
 );
 
+if (duplicates.length) console.log(`Skipped ${duplicates.length} duplicate screenshots: ${duplicates.join(", ")}`);
+// Per type: each renderer has its own text, so one mean over all hides which got worse.
 const scored = entries.filter((e) => e.text);
-if (scored.length) {
-  const mean = (f: (t: TextScore) => number) => pct(scored.reduce((s, e) => s + f(e.text!), 0) / scored.length);
-  console.log(`Mean over ${scored.length} with expected text: CER ${mean((t) => t.cer)}, ignoring spaces ${mean((t) => t.cerIgnoringSpaces)}, lines exact ${mean((t) => t.lineAccuracy)}`);
+for (const kind of [...new Set(scored.map((e) => e.kind))].sort()) {
+  const group = scored.filter((e) => e.kind === kind);
+  const mean = (f: (t: TextScore) => number) => pct(group.reduce((s, e) => s + f(e.text!), 0) / group.length);
+  console.log(
+    `Mean over ${group.length} ${kind} with expected text: CER ignoring spaces ${mean((t) => t.cerIgnoringSpaces)}, ` +
+      `lines ignoring spaces ${mean((t) => t.lineAccuracyIgnoringSpaces)} (exact: CER ${mean((t) => t.cer)}, lines ${mean((t) => t.lineAccuracy)})`,
+  );
 }
+const unscored = [...new Set(entries.map((e) => e.kind))].filter((k) => !scored.some((e) => e.kind === k));
+if (unscored.length) console.log(`No expected text for any ${unscored.sort().join(", ")} screenshot: their text isn't measured.`);
 const marked = entries.filter((e) => e.layout);
 if (marked.length) console.log(`Layout overlap with marked boxes, mean over ${marked.length}: ${pct(marked.reduce((s, e) => s + e.layout!.meanIoU, 0) / marked.length)}`);
 const madeUp = entries.filter((e) => e.unsupported?.length);

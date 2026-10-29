@@ -38,6 +38,12 @@ npm run eval -- --refresh-vision # ask the vision model again instead of replayi
 npm run eval -- --allow-empty   # no screenshots (fresh checkout, CI): report SKIPPED, not fail
 ```
 
+The text score that gates regressions ignores spacing: how many spaces,
+indentation and blank lines. Renderers keep text where the screenshot shows it,
+so the `.txt` can be written compactly. Exact CER and exact lines are shown too.
+Means are reported per type. A screenshot whose bytes repeat an earlier one
+is skipped, so copies don't count twice.
+
 Results go to `eval-results/` (not committed): `latest.json` plus one
 comparison page per screenshot in `eval-results/preview/`.
 

@@ -9,16 +9,21 @@ export function normalize(text: string): string {
   return text.replace(/\r\n?/g, "\n").split("\n").map((line) => line.trimEnd()).join("\n").replace(/\n+$/, "");
 }
 
-/** Every run of spaces as one space: separates spacing errors from letter errors. */
-const collapse = (text: string) => text.replace(/[ \t]+/g, " ").split("\n").map((l) => l.trim()).join("\n");
+/** Every run of spaces as one space, no indentation, no blank lines: separates
+ *  layout spacing (which renderers keep as in the screenshot, and expected .txt
+ *  files usually compact) from letter errors. */
+const collapse = (text: string) =>
+  text.replace(/[ \t]+/g, " ").split("\n").map((l) => l.trim()).filter(Boolean).join("\n");
 
 export interface TextScore {
   /** Edits needed per expected character (0 = exact). */
   cer: number;
-  /** Same, ignoring how many spaces there are. */
+  /** Same, ignoring how many spaces there are, indentation and blank lines. */
   cerIgnoringSpaces: number;
   /** Share of expected lines found word for word in the output. */
   lineAccuracy: number;
+  /** Same, ignoring how many spaces there are and indentation. */
+  lineAccuracyIgnoringSpaces: number;
   /** Edits involving a confusable character, e.g. "l→1"; null when too long to align. */
   confusable: string[] | null;
 }
@@ -71,11 +76,14 @@ export function scoreText(expected: string, actual: string): TextScore {
   const loose = edits([...collapse(want)], [...collapse(got)]);
   const lines = want.split("\n").filter((l) => l.trim());
   const found = new Set(got.split("\n"));
+  const looseFound = new Set(collapse(got).split("\n"));
   const per = (d: number, length: number) => (length ? d / length : d ? 1 : 0);
+  const share = (hit: (line: string) => boolean) => (lines.length ? lines.filter(hit).length / lines.length : 1);
   return {
     cer: per(exact.distance, [...want].length),
     cerIgnoringSpaces: per(loose.distance, [...collapse(want)].length),
-    lineAccuracy: lines.length ? lines.filter((l) => found.has(l)).length / lines.length : 1,
+    lineAccuracy: share((l) => found.has(l)),
+    lineAccuracyIgnoringSpaces: share((l) => looseFound.has(collapse(l))),
     confusable:
       loose.ops?.filter((op) => [...op.replace("→", "")].some((c) => CONFUSABLE.has(c))).map((op) => [...op].map(show).join("")) ??
       null,

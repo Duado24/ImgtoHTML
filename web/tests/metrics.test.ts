@@ -7,6 +7,7 @@ describe("scoreText", () => {
       cer: 0,
       cerIgnoringSpaces: 0,
       lineAccuracy: 1,
+      lineAccuracyIgnoringSpaces: 1,
       confusable: [],
     });
   });
@@ -15,6 +16,14 @@ describe("scoreText", () => {
     const score = scoreText("a  b", "a b");
     expect(score.cer).toBeCloseTo(1 / 4);
     expect(score.cerIgnoringSpaces).toBe(0);
+  });
+
+  it("treats indentation, column gaps and blank lines as spacing", () => {
+    const score = scoreText("OS Customisation\nGENERAL  SERVICES\nSAVE", "   OS Customisation\n\n\n  GENERAL        SERVICES\n\n          SAVE");
+    expect(score.cer).toBeGreaterThan(0.5);
+    expect(score.cerIgnoringSpaces).toBe(0);
+    expect(score.lineAccuracy).toBe(0);
+    expect(score.lineAccuracyIgnoringSpaces).toBe(1);
   });
 
   it("lists confusable-character edits", () => {
