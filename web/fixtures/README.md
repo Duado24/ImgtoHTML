@@ -15,11 +15,27 @@ fixtures/
 - **`<name>.txt`** (optional) = the exact correct text: same lines, same
   indentation. Without it, the screenshot still gets a Canvas check but no text score.
 - **`<name>.json`** (optional) = `{ "kind": "code", "label": "..." }` to override the folder.
+- **`<name>.layout.json`** (optional) = hand-marked component boxes in image
+  pixels, `{ "components": [{ "type": "sidebar", "box": { "x", "y", "width", "height" } }, …] }`
+  (types as in `src/core/vision-layout.ts`). Scored as the overlap of each
+  marked box with the detected component of the same type.
+- **`<name>.vision.json`** (written by eval) = the vision model's saved
+  answers for this screenshot, replayed so runs repeat exactly. Delete it,
+  or run with `--refresh-vision`, to ask the model again.
+
+Each screenshot runs through the same job as the app (OCR, layout, vision
+readings, lookalike corrections, rendering). Besides the text score, eval
+reports the renderer used, the layout overlap, and **made-up words**: visible
+words in the HTML that no OCR word or recorded correction supports. For a
+layout, the text score uses the component whose text best matches the
+`.txt`, since the `.txt` may cover only the code.
 
 ```bash
 npm run eval                    # score everything, compare with baseline.json
 npm run eval -- --save-baseline # make the current scores the new baseline
 npm run eval -- --only ls       # just files whose name contains "ls"
+npm run eval -- --refresh-vision # ask the vision model again instead of replaying
+npm run eval -- --allow-empty   # no screenshots (fresh checkout, CI): report SKIPPED, not fail
 ```
 
 Results go to `eval-results/` (not committed): `latest.json` plus one

@@ -1,4 +1,5 @@
 import { dominantColor, rgbHex } from "./colors";
+import { layoutWords } from "./layout";
 import { escapeHtml } from "./render";
 import type { Box, OcrWord, Pixels } from "./types";
 
@@ -84,33 +85,89 @@ export function assignLayoutWords(layout: VisionLayout, words: readonly OcrWord[
   return assigned;
 }
 
+/** What `paint` draws for some words: HTML, and optionally their text lines. */
+type Painted = string | { html: string; lines: string[] };
+interface Drawn { html: string; lines: string[]; words: OcrWord[] }
+/** Side-by-side items this short (text lines each) read row by row across them. */
+const SHORT = 3;
+
 /** Table columns survive conservative Canvas CSS allowlists. Narrow pages shrink the
- *  columns and cut off long lines at their panel edge: no scrollbar. */
-export function renderLayout(layout: VisionLayout, words: readonly OcrWord[], width: number, label: string, caption: string | null, paint: (words: OcrWord[], box: Box, component?: LayoutComponent) => string, pixels?: Pixels): string {
+ *  columns and cut off long lines at their panel edge: no scrollbar.
+ *  `lines`, when given, receives the text in reading order: side-by-side
+ *  items of at most SHORT lines each (a name beside a badge, a row of cards)
+ *  read row by row across them; taller ones (a sidebar beside an editor)
+ *  one after the other. */
+export function renderLayout(layout: VisionLayout, words: readonly OcrWord[], width: number, label: string, caption: string | null, paint: (words: OcrWord[], box: Box, component?: LayoutComponent) => Painted, pixels?: Pixels, lines?: string[]): string {
   const assigned = assignLayoutWords(layout, words);
-  function group(nodes: LayoutComponent[]): string {
-    if (!nodes.length) return "";
-    const sorted = [...nodes].sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
+  const drawn = (p: Painted, ws: OcrWord[]): Drawn => (typeof p === "string" ? { html: p, lines: [], words: ws } : { ...p, words: ws });
+  const nothing: Drawn = { html: "", lines: [], words: [] };
+  // A component's children, plus blocks of its own words that fall outside
+  // them, each placed where it sits: a word beside a child shares its row,
+  // a word below it comes after it.
+  type Item = { box: Box; component: LayoutComponent } | { box: Box; words: OcrWord[] };
+  function group(children: LayoutComponent[], loose: readonly OcrWord[], parent?: LayoutComponent): Drawn {
+    const items: Item[] = [...children.map((c) => ({ box: c.box, component: c })), ...textBlocks(loose, children).map((ws) => ({ box: bounds(ws), words: ws }))];
+    if (!items.length) return nothing;
+    const sorted = items.sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
     // Partition into horizontal bands. Overlapping vertical ranges share a row.
-    const bands: LayoutComponent[][] = [];
+    const bands: Item[][] = [];
     for (const c of sorted) {
       const band = bands[bands.length - 1];
       if (band && c.box.y < Math.max(...band.map((n) => n.box.y + n.box.height)) - 3) band.push(c);
       else bands.push([c]);
     }
-    return bands.map((band) => {
+    const draw = (item: Item): Drawn => ("component" in item ? node(item.component) : drawn(paint(item.words, item.box, parent), item.words));
+    const parts = bands.map((band): Drawn => {
       band.sort((a, b) => a.box.x - b.box.x);
-      if (band.length === 1) return node(band[0]!);
+      const cells = band.map(draw);
+      if (band.length === 1) return cells[0]!;
       const total = band.reduce((s, c) => s + c.box.width, 0);
-      return '<table role="presentation" style="width:100%;table-layout:fixed;border-collapse:collapse;border:none;"><tbody><tr>' + band.map((c) => `<td style="width:${100 * c.box.width / total}%;vertical-align:top;padding:0;border:none;">${node(c)}</td>`).join("") + '</tr></tbody></table>';
-    }).join("");
+      const all = cells.flatMap((c) => c.words);
+      const short = cells.every((c) => c.lines.filter((l) => l.trim()).length <= SHORT);
+      return {
+        html: '<table role="presentation" style="width:100%;table-layout:fixed;border-collapse:collapse;border:none;"><tbody><tr>' + band.map((c, i) => `<td style="width:${100 * c.box.width / total}%;vertical-align:top;padding:0;border:none;">${cells[i]!.html}</td>`).join("") + '</tr></tbody></table>',
+        lines: short ? layoutWords(all).lines : cells.flatMap((c) => c.lines),
+        words: all,
+      };
+    });
+    return { html: parts.map((p) => p.html).join(""), lines: parts.flatMap((p) => p.lines), words: parts.flatMap((p) => p.words) };
   }
-  function node(c: LayoutComponent): string {
+  function node(c: LayoutComponent): Drawn {
     const own = assigned.get(c.id) ?? [];
-    return `<div id="layout-${c.id}" style="min-width:0;overflow:hidden;${pixels ? `background-color:${rgbHex(dominantColor(pixels, c.box))};` : ""}min-height:${Math.round(c.box.height)}px;">` + (own.length ? paint(own, c.box, c) : "") + group(layout.components.filter((n) => n.parent === c.id)) + '</div>';
+    const children = layout.components.filter((n) => n.parent === c.id);
+    // Without children, the component's words are its content; with them,
+    // they're placed among the children.
+    const body = children.length ? group(children, own, c) : own.length ? drawn(paint(own, c.box, c), own) : nothing;
+    return { ...body, html: `<div id="layout-${c.id}" style="min-width:0;overflow:hidden;${pixels ? `background-color:${rgbHex(dominantColor(pixels, c.box))};` : ""}min-height:${Math.round(c.box.height)}px;">` + body.html + '</div>' };
   }
-  const leftover = assigned.get("\0") ?? [];
-  return `<div role="figure" aria-label="${escapeHtml(label)}" style="max-width:100%;overflow:hidden;"><div style="width:100%;">` + group(layout.components.filter((c) => c.parent === null)) + (leftover.length ? paint(leftover, { x: 0, y: 0, width, height: 0 }) : "") + '</div>' + (caption ? `<p>${escapeHtml(caption)}</p>` : "") + '</div>';
+  const root = group(layout.components.filter((c) => c.parent === null), assigned.get("\0") ?? []);
+  lines?.push(...root.lines);
+  return `<div role="figure" aria-label="${escapeHtml(label)}" style="max-width:100%;overflow:hidden;"><div style="width:100%;">` + root.html + '</div>' + (caption ? `<p>${escapeHtml(caption)}</p>` : "") + '</div>';
+}
+
+const bounds = (ws: readonly OcrWord[]): Box => {
+  const x = Math.min(...ws.map((w) => w.x)), y = Math.min(...ws.map((w) => w.y));
+  return { x, y, width: Math.max(...ws.map((w) => w.x + w.width)) - x, height: Math.max(...ws.map((w) => w.y + w.height)) - y };
+};
+
+/** Words in text rows (vertically overlapping words), and consecutive rows
+ *  merged into one block unless a child component lies between them. */
+function textBlocks(words: readonly OcrWord[], children: readonly LayoutComponent[]): OcrWord[][] {
+  const rows: OcrWord[][] = [];
+  for (const w of [...words].sort((a, b) => a.y + a.height / 2 - (b.y + b.height / 2))) {
+    const row = rows.at(-1);
+    const middle = row && bounds(row).y + bounds(row).height / 2;
+    if (row && Math.abs(w.y + w.height / 2 - middle!) < w.height / 2) row.push(w);
+    else rows.push([w]);
+  }
+  const blocks: OcrWord[][] = [];
+  for (const row of rows) {
+    const block = blocks.at(-1);
+    const top = block && bounds(block).y + bounds(block).height, bottom = bounds(row).y;
+    if (block && !children.some((c) => c.box.y + c.box.height / 2 > top! && c.box.y + c.box.height / 2 < bottom)) block.push(...row);
+    else blocks.push([...row]);
+  }
+  return blocks;
 }
 
 /** Share of a line's pixels that must change for it to count as an edge. */

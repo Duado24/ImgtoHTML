@@ -233,13 +233,21 @@ has pale cores and colorful edges that the eye blends.
 Kinds without enough letters keep VS Code Dark+.
 
 When OCR was unsure of a word (below 95%) and the vision model read it with
-only lookalike characters changed (I/T, I/l/1, O/0, comma/period, curly/straight
-quotes, or one dropped period), the vision reading is used and listed in
+only lookalike characters changed (I/T, I/l/1, O/0, comma/period, or one
+dropped period; not quote style, which vision models normalize even where the
+screenshot shows curly quotes), the vision reading is used and listed in
 `review.vision.corrected`. Any other disagreement stays a review suggestion.
 With a layout, the vision model reads each component that holds text
 (sidebar, tab bar, breadcrumb, code) on its own. A word on a line that doesn't
 line up with the vision reading (different spacing, one tab per line) still
 gets the one vision word, if exactly one, that differs only by lookalikes.
+
+Words inside a component but outside all of its children (vision boxes are
+approximate) are placed among the children by position, not drawn first. The
+transcript follows the layout's reading order: side-by-side items of at most
+three lines each (a name beside a badge, a row of cards) read row by row
+across them; taller ones (a sidebar beside an editor) one after the other.
+Code components contribute their cleaned code, without line numbers.
 
 Code lines cut off at the panel's right edge keep their cut-off text, but for
 highlighting only, a string they leave open is closed at the edge; otherwise it

@@ -112,3 +112,37 @@ describe("stacked strips", () => {
     expect(refineLayout(squashed, flat)).toEqual(squashed);
   });
 });
+
+describe("reading order and loose words", () => {
+  const w = (text: string, x: number, y: number, line: number): OcrWord => ({ text, x, y, width: text.length * 7, height: 12, confidence: 99, block: 1, paragraph: 1, line });
+  const paint = (ws: OcrWord[]) => ({ html: ws.map((x) => x.text).join(" "), lines: [ws.map((x) => x.text).join(" ")] });
+  const read = (layout: VisionLayout, words: OcrWord[]) => {
+    const lines: string[] = [];
+    const html = renderLayout(layout, words, 400, "page", null, paint, undefined, lines);
+    return { html, lines };
+  };
+
+  it("places a parent's loose words where they sit, not before its children", () => {
+    const page = validateLayout({ application: "website", components: [
+      { id: "page", type: "container", parent: null, box: { x: 0, y: 0, width: 400, height: 200 } },
+      { id: "card", type: "content", parent: "page", box: { x: 0, y: 0, width: 400, height: 40 } },
+    ] }, 400, 200)!;
+    // "Roster" is below the card but outside it: the card must come first.
+    const { html } = read(page, [w("Title", 10, 10, 1), w("Roster", 10, 150, 2)]);
+    expect(html.indexOf("Title")).toBeLessThan(html.indexOf("Roster"));
+  });
+  it("reads short side-by-side items row by row, tall ones one after the other", () => {
+    const side = (h: number) => validateLayout({ application: "website", components: [
+      { id: "left", type: "content", parent: null, box: { x: 0, y: 0, width: 200, height: h } },
+      { id: "right", type: "content", parent: null, box: { x: 200, y: 0, width: 200, height: h } },
+    ] }, 400, 200)!;
+    const short = [w("Sean", 10, 10, 1), w("Submitted", 250, 10, 1)];
+    // One row, with the gap between them kept as spaces.
+    expect(read(side(30), short).lines.map((l) => l.replace(/\s+/g, " "))).toEqual(["Sean Submitted"]);
+    const tall = [0, 1, 2, 3].flatMap((i) => [w(`left${i}`, 10, 10 + i * 20, i), w(`right${i}`, 250, 10 + i * 20, i)]);
+    const paintRows = (ws: OcrWord[]) => ({ html: "", lines: ws.map((x) => x.text) });
+    const lines: string[] = [];
+    renderLayout(side(200), tall, 400, "page", null, paintRows, undefined, lines);
+    expect(lines).toEqual(["left0", "left1", "left2", "left3", "right0", "right1", "right2", "right3"]);
+  });
+});

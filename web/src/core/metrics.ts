@@ -81,3 +81,52 @@ export function scoreText(expected: string, actual: string): TextScore {
       null,
   };
 }
+
+interface Placed {
+  type: string;
+  box: { x: number; y: number; width: number; height: number };
+}
+
+export interface LayoutScore {
+  /** Mean over the hand-marked components (1 = every box exact, 0 = none found). */
+  meanIoU: number;
+  /** Per marked component: the best overlap (intersection over union) with a detected one of the same type. */
+  components: { type: string; iou: number }[];
+}
+
+const iou = (a: Placed["box"], b: Placed["box"]) => {
+  const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  const inter = w > 0 && h > 0 ? w * h : 0;
+  return inter / (a.width * a.height + b.width * b.height - inter);
+};
+
+/** How well detected components match hand-marked ones (a `.layout.json`
+ *  next to a test screenshot). No layout detected scores 0 everywhere. */
+export function scoreLayout(detected: readonly Placed[] | null | undefined, marked: readonly Placed[]): LayoutScore {
+  const components = marked.map((m) => ({
+    type: m.type,
+    iou: Math.max(0, ...(detected ?? []).filter((d) => d.type === m.type).map((d) => iou(d.box, m.box))),
+  }));
+  return { meanIoU: components.reduce((s, c) => s + c.iou, 0) / Math.max(1, components.length), components };
+}
+
+/** Tags that separate words when the page is read; other tags (spans) join their text. */
+const BLOCK = /<\/?(?:div|td|th|tr|table|tbody|thead|p|br|li|ul|ol|h[1-6]|figure|figcaption|section)\b[^>]*>/gi;
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+/** Named entities above, and numeric ones (&#39; &#x27;). */
+const decode = (text: string) =>
+  text.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (whole, e: string) =>
+    e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : ENTITIES[e] ?? whole);
+/** Quote style and doubled quotes are clean-up, not new text. */
+const wordKey = (w: string) => w.replace(/[“”„‟″]/g, '"').replace(/[‘’‚‛′]/g, "'").replace(/(["'])\1+/g, "$1");
+
+/** Visible words of `html` (words with a letter in them) that none of the
+ *  `supported` words backs up: text the converter made up. Punctuation-only
+ *  tokens (repaired braces, drawn arrows) and numbers (renumbered gutters)
+ *  aren't counted. Quote style and doubled quotes are ignored. */
+export function unsupportedWords(html: string, supported: Iterable<string>): string[] {
+  const known = new Set([...supported].flatMap((s) => s.split(/\s+/)).map(wordKey));
+  const text = decode(html.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, " ").replace(BLOCK, " ").replace(/<[^>]+>/g, ""));
+  return text.split(/\s+/).filter((w) => /\p{L}/u.test(w) && !known.has(wordKey(w)));
+}

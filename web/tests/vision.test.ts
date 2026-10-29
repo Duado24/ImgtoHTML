@@ -49,7 +49,7 @@ describe("lookalike corrections", () => {
     expect(onlyLookalikes("HIML", "HTML")).toBe(true);
     expect(onlyLookalikes("packagejson", "package.json")).toBe(true);
     expect(onlyLookalikes("package,json", "package.json")).toBe(true);
-    expect(onlyLookalikes("“dev”:", '"dev":')).toBe(true);
+    expect(onlyLookalikes("“dev”:", '"dev":')).toBe(false); // quote style isn't a lookalike: vision models straighten real curly quotes
   });
   it("leaves real disagreements for the reviewer", () => {
     expect(onlyLookalikes("Debug", "1")).toBe(false);

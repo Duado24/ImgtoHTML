@@ -83,7 +83,9 @@ function mergeRegion(region: ModelRegion, reading: RegionReading): ModelRegion {
 }
 
 /** Characters OCR commonly swaps in small screen text, both ways. */
-const LOOKALIKES = ["IT", "Il", "I1", "l1", "I|", "l|", "O0", "o0", "S5", "B8", "Z2", ",.", ";:", '"“', '"”', "'‘", "'’"];
+// Not quote styles: vision models tend to straighten curly quotes the
+// screenshot really shows (code panels straighten quotes in their own clean-up).
+const LOOKALIKES = ["IT", "Il", "I1", "l1", "I|", "l|", "O0", "o0", "S5", "B8", "Z2", ",.", ";:"];
 const swappable = (a: string, b: string) => a === b || LOOKALIKES.some((p) => p === a + b || p === b + a);
 /** OCR confidence (0–1) above which its reading is kept even against the vision model. */
 const TRUST_OCR = 0.95;

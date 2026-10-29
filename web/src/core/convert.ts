@@ -1,5 +1,5 @@
 import { measureFont, chromeNoise, splitItems, itemBox, panelBackground, treeArrows, MONO_FONT, UI_FONT } from "./panel-features";
-import { renderLayout, checkLayout, refineLayout, type LayoutAttempt, type VisionLayout } from "./vision-layout";
+import { renderLayout, checkLayout, refineLayout, type LayoutAttempt, type LayoutComponent, type VisionLayout } from "./vision-layout";
 /** Screenshot → Canvas HTML draft. Pure: takes decoded pixels and OCR
  *  words, returns the files to offer for download. The browser parts
  *  (decoding the image, running OCR) live in src/browser/. */
@@ -126,6 +126,8 @@ export interface ConvertResult {
   reviewFile: OutputFile;
   /** Regions, lines and spans with confidence and source (see model.ts). */
   model: ScreenshotModel;
+  /** Layout only: each component's text in reading order (code cleaned, without line numbers). */
+  sections?: { component: string; type: string; lines: string[] }[];
   modelFile: OutputFile;
 }
 
@@ -347,15 +349,17 @@ export function convert(input: ConvertInput): ConvertResult {
   let uncertain: UncertainWord[];
   let panels = 1;
   let code: Review["code"] = null;
+  let sections: ConvertResult["sections"];
   const codePanels: NonNullable<Review["code_panels"]> = [];
   const panelFeatures: NonNullable<Review["panel_features"]> = [];
 
   if (layout) {
     renderer = "layout";
-    textLines = ocr.lines;
     uncertain = ocr.uncertain;
     painted = [];
-    html = renderLayout(layout, words, pixels.width, label, caption, (panelWords, box, component) => {
+    // Each component's text, in the order the page shows them.
+    const layoutSections: NonNullable<ConvertResult["sections"]> = (sections = []);
+    const paintPanel = (panelWords: OcrWord[], box: Box, component?: LayoutComponent): string => {
       const bg = panelBackground(pixels, box);
       const fg = fixContrast(foreground, bg);
       if (component?.type === "code") {
@@ -387,6 +391,7 @@ export function convert(input: ConvertInput): ConvertResult {
         details.lines_highlighted = lineBackgrounds.filter(Boolean).length;
         const rows = cleaned.lineNumbersRemoved ? codeRows(highlighted, cleaned.hints, cleaned.firstLine, rgbHex(palette.colors.text), false, gutterWidth, codeStarts.length >= 3 ? 8 : 14, lineBackgrounds)
           : highlighted.map((l) => `<tr><td style="padding:0;white-space:pre;">${l.runs.map((r) => `<span style="color:${rgbHex(r.color ?? palette.colors.text)};">${escapeHtml(r.text)}</span>`).join("")}</td></tr>`).join("");
+        layoutSections.push({ component: component.id, type: component.type, lines: [...cleaned.header, ...normalized, ...suffix] });
         return `<div style="min-height:${Math.round(box.height)}px;background-color:${rgbHex(bg)};color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};overflow:hidden;">${plain(cleaned.header)}<table style="width:100%;border-collapse:collapse;border:none;color:${rgbHex(palette.colors.text)};font:13px/1.45 ${MONO_FONT};"><tbody>${rows}</tbody></table>${plain(suffix)}</div>`;
       }
       const removed = component ? panelWords.filter((w) => chromeNoise(w, component)) : [];
@@ -402,6 +407,7 @@ export function convert(input: ConvertInput): ConvertResult {
       });
       const font = measureFont(visible, component?.type === "terminal" ? MONO_FONT : UI_FONT);
       if (component) panelFeatures.push({ component: component.id, font, icons_removed: removed.map((w) => w.text), arrows: [...arrows].map(([w, to]) => ({ from: w.text, to })) });
+      layoutSections.push({ component: component?.id ?? "outside", type: component?.type ?? "other", lines: layoutWords(visible).lines });
       const draw = (ws: OcrWord[], bounds: typeof box) => {
         const background = bounds.height > 0 ? panelBackground(pixels, bounds) : bg;
         const panel = paintLeaf(pixels, { kind: "leaf", box: bounds, background, words: ws }, looks);
@@ -437,7 +443,15 @@ export function convert(input: ConvertInput): ConvertResult {
         }).join("") + '</div>';
       }
       return draw(visible, box);
-    }, pixels);
+    };
+    // Reading order follows the layout, not OCR's rows across the whole image
+    // (which would interleave a sidebar with the code beside it).
+    const reading: string[] = [];
+    html = renderLayout(layout, words, pixels.width, label, caption, (ws, box, component) => {
+      const panelHtml = paintPanel(ws, box, component);
+      return { html: panelHtml, lines: layoutSections.at(-1)?.lines ?? [] };
+    }, pixels, reading);
+    textLines = reading;
     panels = layout.components.length;
   } else if (kind === "code" && theme) {
     // Code is re-highlighted by language rather than painted from pixels.
@@ -590,6 +604,7 @@ export function convert(input: ConvertInput): ConvertResult {
     },
     model,
     modelFile: { name: `${stem}_model.json`, mime: "application/json", content: JSON.stringify(model, null, 2) },
+    ...(sections ? { sections } : {}),
   };
 }
 
