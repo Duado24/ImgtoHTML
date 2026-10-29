@@ -1,4 +1,5 @@
 import "./style.css";
+import { reviewCounts, reviewReadyText } from "./browser/review-status";
 
 import { issuesFor, type ConvertResult, type OutputFile } from "./core/convert";
 import type { ModelRegion } from "./core/model";
@@ -227,8 +228,7 @@ function show(result: ConvertResult, preview: OutputFile) {
 const toReview = (r: ConvertResult) => r.model.regions.filter((x) => x.review === "pending" && x.flags.length);
 
 function readyText(r: ConvertResult): string {
-  const n = toReview(r).length;
-  return n ? `Draft ready. ${n} ${n === 1 ? "region needs" : "regions need"} a look before Canvas.` : "Draft ready. Nothing left to review.";
+  return reviewReadyText(r.model.regions);
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text = ""): HTMLElementTagNameMap[K] {
@@ -326,7 +326,8 @@ function renderReview(result: ConvertResult) {
   );
   const pending = toReview(result);
   $("review").hidden = flagged.length === 0;
-  $("review-count").textContent = pending.length ? `· ${pending.length} to check` : "· done";
+  const counts = reviewCounts(regions);
+  $("review-count").textContent = `${counts.pending} pending / ${counts.approved} approved / ${counts.corrected} corrected / ${counts.skipped} skipped (unverified)`;
   $<HTMLButtonElement>("skip-all").disabled = pending.length === 0;
   $("regions").replaceChildren(...pending.map(regionCard));
 }
