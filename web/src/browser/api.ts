@@ -47,6 +47,11 @@ const post = (id: string, action: string, body: object) =>
     body: JSON.stringify(body),
   });
 
+/** Cancellation is terminal on the server; polling observes its result. */
+export async function cancelJob(id: string): Promise<Job> {
+  return json<Job>(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+}
+
 function done(job: Job | { id: string }): JobResult {
   if ("status" in job && job.status === "completed") return job.result;
   throw new Error("Unexpected reply from the local server.");
@@ -63,8 +68,9 @@ export async function editSpan(id: string, span: string, text: string): Promise<
 }
 
 /** Read one region again, enlarged, with an optional hint for the vision model. */
-export async function retryRegion(id: string, region: string, hint: string, progress: (text: string) => void): Promise<JobResult> {
+export async function retryRegion(id: string, region: string, hint: string, progress: (text: string) => void, onQueued?: () => void): Promise<JobResult> {
   await post(id, "retry", hint ? { region, hint } : { region });
+  onQueued?.();
   return waitFor(id, progress);
 }
 

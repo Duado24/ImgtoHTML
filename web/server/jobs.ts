@@ -21,6 +21,17 @@ import { recognizeWords, score } from "./ocr/pipeline";
 type Submission = Pick<ConvertInput, "fileName" | "kind" | "label" | "caption" | "transcript" | "editorWindow">;
 const TTL = 30 * 60 * 1000;
 const MAX_RESULTS = 20;
+const GRACE = 60_000;
+const DEFAULT_TIMEOUT = 600_000;
+
+function positiveSetting(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (Number.isFinite(value) && value > 0 && (name !== "IMGTOHTML_JOB_TIMEOUT_MS" || value <= 2_147_483_647)) return value;
+  console.warn(`${name} must be a positive number; using ${fallback}.`);
+  return fallback;
+}
 /** Margin (px) around a region when it is re-read on its own. */
 const FOCUS_PAD = 8;
 /** Reviewer corrections, one JSON object per line: future training data. Not committed. */
@@ -56,6 +67,15 @@ interface Entry {
   job: Job;
   finished?: number;
   session?: Session;
+  retainedBytes?: number;
+  fetched?: boolean;
+  oversizedLogged?: boolean;
+  operation?: {
+    deadline: number;
+    timer: ReturnType<typeof setTimeout>;
+    started: boolean;
+    release: () => void;
+  };
 }
 
 const overlap = (a: Box, b: Box) =>
@@ -72,25 +92,87 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 export class Jobs {
   private readonly entries = new Map<string, Entry>();
   private tail = Promise.resolve();
+  private readonly timeout = positiveSetting("IMGTOHTML_JOB_TIMEOUT_MS", DEFAULT_TIMEOUT);
+  private readonly budget = positiveSetting("IMGTOHTML_MEMORY_BUDGET_MB", 512) * 1024 * 1024;
+  private readonly reaper: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly engine: OcrEngine,
     private readonly vision: VisionModel = new NullVisionModel(),
     /** Where reviewer corrections are appended; null keeps none (tests). */
     private readonly corrections: string | null = CORRECTIONS,
-  ) {}
+  ) {
+    this.reaper = setInterval(() => this.prune(), 30_000);
+    this.reaper.unref();
+  }
 
   get(id: string): Job | undefined {
     this.prune();
-    return this.entries.get(id)?.job;
+    const entry = this.entries.get(id);
+    if (!entry) return undefined;
+    const job = entry.job;
+    if (job.status === "completed") entry.fetched = true;
+    this.prune();
+    return job;
+  }
+
+  cancel(id: string): Job | undefined {
+    const entry = this.entries.get(id);
+    if (!entry) return undefined;
+    this.finish(entry, { id, status: "failed", error: "Cancelled" });
+    return entry.job;
+  }
+
+  private account(entry: Entry) {
+    const image = entry.session?.image;
+    // Conservative estimate: decoded pixels, compressed PNG, UTF-16 output
+    // strings (including base64 previews), and session review/OCR metadata.
+    entry.retainedBytes = (image?.pixels.data.byteLength ?? 0) + (image?.png.byteLength ?? 0)
+      + Buffer.byteLength(JSON.stringify(entry.job), "utf8") * 2
+      + (entry.session ? Buffer.byteLength(JSON.stringify({ ...entry.session, image: undefined }), "utf8") * 2 : 0);
+    if (entry.retainedBytes > this.budget && !entry.oversizedLogged) {
+      console.warn(`Job ${entry.job.id} retains approximately ${entry.retainedBytes} bytes, exceeding the ${this.budget} byte memory budget; keeping it until fetched or the 60-second grace period ends.`);
+      entry.oversizedLogged = true;
+    }
   }
 
   private prune() {
-    for (const [id, entry] of this.entries) {
-      if (entry.finished !== undefined && Date.now() - entry.finished >= TTL) this.entries.delete(id);
+    const finished = [...this.entries].filter(([, e]) => e.finished !== undefined)
+      .sort((a, b) => a[1].finished! - b[1].finished!);
+    let bytes = finished.reduce((sum, [, e]) => sum + (e.retainedBytes ?? 0), 0);
+    let count = finished.length;
+    for (const [id, entry] of finished) {
+      const age = Date.now() - entry.finished!;
+      // An individually oversized result is the sole exception to the grace
+      // period: once fetched it no longer needs to remain available.
+      const oversizedFetched = entry.fetched && (entry.retainedBytes ?? 0) > this.budget;
+      if (age < GRACE && !oversizedFetched) continue;
+      if (age >= TTL || bytes > this.budget || count > MAX_RESULTS) {
+        this.entries.delete(id);
+        bytes -= entry.retainedBytes ?? 0;
+        count--;
+      }
     }
-    const finished = [...this.entries].filter(([, entry]) => entry.finished !== undefined);
-    for (const [id] of finished.slice(0, Math.max(0, finished.length - MAX_RESULTS))) this.entries.delete(id);
+  }
+
+  private finish(entry: Entry, job: Extract<Job, { status: "completed" | "failed" }>) {
+    if (entry.finished !== undefined) return;
+    entry.job = job;
+    entry.finished = Date.now();
+    if (entry.operation) {
+      clearTimeout(entry.operation.timer);
+      if (!entry.operation.started) entry.operation.release();
+    }
+    if (job.status === "failed") entry.session = undefined;
+    this.account(entry);
+    this.prune();
+  }
+
+  private check(entry: Entry) {
+    if (entry.finished === undefined && entry.operation && Date.now() >= entry.operation.deadline) {
+      this.finish(entry, { id: entry.job.id, status: "failed", error: `Timed out after ${this.timeout / 60_000} minutes` });
+    }
+    if (entry.finished !== undefined) throw new Error("Job already finished");
   }
 
   private get usesVision() {
@@ -152,34 +234,54 @@ export class Jobs {
   }
 
   /** Run work after any queued OCR, showing progress on the job meanwhile. */
-  private queue(id: string, entry: Entry, work: (progress: (text: string) => void) => Promise<void>, release?: () => void) {
+  private queue(id: string, entry: Entry, work: (progress: (text: string) => void, check: () => void) => Promise<void>, release?: () => void) {
+    let released = false;
+    const releaseOnce = () => { if (!released) { released = true; release?.(); } };
+    entry.finished = undefined;
+    entry.fetched = false;
+    const operation = {
+      deadline: Date.now() + this.timeout,
+      timer: setTimeout(() => this.finish(entry, { id, status: "failed", error: `Timed out after ${this.timeout / 60_000} minutes` }), this.timeout),
+      started: false,
+      release: releaseOnce,
+    };
+    entry.operation = operation;
+    operation.timer.unref();
     this.tail = this.tail.then(async () => {
       // Let the 202 response and any waiting polls flush before doing CPU work.
       await setImmediate();
-      const progress = (text: string) => (entry.job = { id, status: "running", progress: text });
+      const check = () => this.check(entry);
+      const progress = (text: string) => { check(); entry.job = { id, status: "running", progress: text }; };
       try {
-        await work(progress);
+        check();
+        operation.started = true;
+        await work(progress, check);
+        check();
         let result = this.finalize(entry.session!);
+        check();
         if (process.env.IMGTOHTML_VALIDATE_LAYOUT === "1" && result.review.layout) {
           progress("Validating layout in Chromium...");
           try {
             const { validateVisual } = await import("./visual-validation");
+            check();
             const session = entry.session!;
             const report = await validateVisual(result.html, session.image.png, result.review.layout, session.image.pixels.width, session.image.pixels.height);
+            check();
             result = { ...result, html: report.html, htmlFile: { ...result.htmlFile, content: report.html }, review: { ...result.review,
               canvas_issues: checkCanvasSafe(report.html), visual_validation: { status: report.discrepancies.length ? "failed" : "passed", discrepancies: report.discrepancies, pixelMeanAbsoluteError: report.pixelMeanAbsoluteError, repaired: report.repaired } } };
           } catch (error) {
+            check();
             result.review.visual_validation = { status: "unavailable", discrepancies: [], pixelMeanAbsoluteError: null, repaired: false, error: message(error) };
           }
           result.reviewFile = { ...result.reviewFile, content: JSON.stringify(result.review, null, 2) };
           result.preview = previewPage(result, result.imageDataUrl);
         }
-        entry.job = { id, status: "completed", result };
+        check();
+        this.finish(entry, { id, status: "completed", result });
       } catch (error) {
-        entry.job = { id, status: "failed", error: message(error) };
+        this.finish(entry, { id, status: "failed", error: Date.now() >= operation.deadline ? `Timed out after ${this.timeout / 60_000} minutes` : message(error) });
       } finally {
-        entry.finished = Date.now();
-        release?.();
+        releaseOnce();
         this.prune();
       }
     });
@@ -194,12 +296,15 @@ export class Jobs {
   submit(input: Submission, image: DecodedImage, release: () => void): string {
     this.prune();
     const id = randomUUID();
-    const entry: Entry = { job: { id, status: "queued", progress: "Waiting for the text reader…" } };
+    const entry: Entry = { session: { input, image, words: [], readings: [], decisions: new Map(), edited: new Set() }, job: { id, status: "queued", progress: "Waiting for the text reader…" } };
     this.entries.set(id, entry);
-    this.queue(id, entry, async (progress) => {
+    this.queue(id, entry, async (progress, check) => {
+      const session = entry.session!;
+      const { input, image } = session;
       progress("Reading text…");
-      const words = await recognizeWords(this.engine, image.pixels, progress);
-      const session: Session = { input, image, words, readings: [], decisions: new Map(), edited: new Set() };
+      const words = await recognizeWords(this.checkedEngine(check), image.pixels, progress);
+      check();
+      session.words = words;
       if (!this.usesVision) session.layoutNote = "the vision model is off";
       else if (!this.vision.detectLayout) session.layoutNote = `${this.vision.name} doesn't detect layouts`;
       if (this.usesVision) {
@@ -211,6 +316,7 @@ export class Jobs {
             session.layoutNote = `layout detection failed: ${message(error)}`;
           }
         }
+        check();
         progress("Checking with the vision model…");
         const first = convert({ ...input, pixels: image.pixels, animated: image.animated, words, layout: session.layout?.layout });
         // With a layout, the vision model reads each component that holds
@@ -223,6 +329,7 @@ export class Jobs {
           : first.model.regions.filter((r) => r.lines.length).map(({ id, box }) => ({ id, box }));
         try {
           session.readings = await this.readVision(session, regions);
+          check();
           if (input.kind === "diagram" && this.vision.describeDiagram) {
             progress("Describing the diagram…");
             session.diagram = await this.vision.describeDiagram(image.pixels);
@@ -231,6 +338,7 @@ export class Jobs {
           session.visionError = message(error);
         }
       }
+      check();
       entry.session = session;
     }, release);
     return id;
@@ -253,6 +361,8 @@ export class Jobs {
       session.decisions.set(r.id, state === "approved" && session.edited.has(r.id) ? "corrected" : state);
     }
     entry.job = { id, status: "completed", result: this.finalize(session) };
+    this.account(entry);
+    this.prune();
     return entry.job;
   }
 
@@ -270,6 +380,8 @@ export class Jobs {
     session.words[index] = { ...word, text: clean, confidence: 100 };
     session.edited.add(region.id);
     entry.job = { id, status: "completed", result: this.finalize(session) };
+    this.account(entry);
+    this.prune();
 
     // Saved for later training; a failed write must not lose the edit.
     const record = {
@@ -304,36 +416,56 @@ export class Jobs {
       width: Math.min(pixels.width, region.box.x + region.box.width + FOCUS_PAD) - Math.max(0, region.box.x - FOCUS_PAD),
       height: Math.min(pixels.height, region.box.y + region.box.height + FOCUS_PAD) - Math.max(0, region.box.y - FOCUS_PAD),
     };
+    const regionBox = { ...region.box };
     entry.finished = undefined;
     // Show it as running at once, so polling never sees the old result as the new one.
     entry.job = { id, status: "running", progress: "Waiting for the text reader…" };
-    this.queue(id, entry, async (progress) => {
+    this.queue(id, entry, async (progress, check) => {
+      const session = entry.session!;
+      const pixels = session.image.pixels;
       progress(`Reading ${regionId} again…`);
-      const before = session.words.filter((w) => centerIn(w, region.box));
-      const again = (await recognizeWords(this.engine, cropPixels(pixels, box))).map((w) => ({
+      const before = session.words.filter((w) => centerIn(w, regionBox));
+      const again = (await recognizeWords(this.checkedEngine(check), cropPixels(pixels, box), progress)).map((w) => ({
         ...w,
         x: w.x + box.x,
         y: w.y + box.y,
         symbols: w.symbols?.map((s) => ({ ...s, x: s.x + box.x, y: s.y + box.y })),
       }));
+      check();
       if (score(again) > score(before)) {
         session.words = [...session.words.filter((w) => !before.includes(w)), ...again];
       }
       if (this.usesVision) {
         progress(`Asking the vision model about ${regionId}…`);
         try {
-          const [reading] = await this.readVision(session, [{ id: regionId, box: region.box }], hint ?? "");
-          if (reading) session.readings = [...session.readings.filter((r) => overlap(r.box, region.box) === 0), reading];
+          const [reading] = await this.readVision(session, [{ id: regionId, box: regionBox }], hint ?? "");
+          check();
+          if (reading) session.readings = [...session.readings.filter((r) => overlap(r.box, regionBox) === 0), reading];
           session.visionError = undefined;
         } catch (error) {
           session.visionError = message(error);
         }
       }
+      check();
       session.decisions.delete(regionId);
     });
   }
 
+  private checkedEngine(check: () => void): OcrEngine {
+    // OCR and Ollama calls may not be interruptible. Keep the serial worker
+    // occupied until they settle, stop at the next boundary, discard late
+    // results, and release admission exactly once when the work unwinds.
+    return { recognize: async (input) => {
+      check();
+      const words = await this.engine.recognize(input);
+      check();
+      return words;
+    } };
+  }
+
   async close() {
+    clearInterval(this.reaper);
+    for (const entry of this.entries.values()) this.cancel(entry.job.id);
     await this.tail;
     await this.engine.close?.();
     this.entries.clear();

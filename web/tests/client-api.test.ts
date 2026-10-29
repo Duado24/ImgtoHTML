@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { convertOnServer } from "../src/browser/api";
+import { cancelJob, convertOnServer } from "../src/browser/api";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 const file = new File(["image bytes"], "a.png", { type: "image/png" });
@@ -37,4 +37,15 @@ it("surfaces upload errors and failed jobs", async () => {
   fetch.mockResolvedValueOnce(response({ id: "job-id" }, 202))
     .mockResolvedValueOnce(response({ id: "job-id", status: "failed", error: "Tesseract failed" }));
   await expect(convertOnServer(file, options, () => {})).rejects.toThrow("Tesseract failed");
+});
+
+it("posts cancellation for the encoded job ID and surfaces failures", async () => {
+  const cancelled = { id: "job/id", status: "failed", error: "Cancelled" };
+  const fetch = vi.fn().mockResolvedValueOnce(response(cancelled));
+  vi.stubGlobal("fetch", fetch);
+  expect(await cancelJob("job/id")).toEqual(cancelled);
+  expect(fetch.mock.calls[0]![0]).toBe("/api/jobs/job%2Fid/cancel");
+  expect(fetch.mock.calls[0]![1].method).toBe("POST");
+  fetch.mockResolvedValueOnce(response({ error: "Job not found" }, 404));
+  await expect(cancelJob("missing")).rejects.toThrow("Job not found");
 });

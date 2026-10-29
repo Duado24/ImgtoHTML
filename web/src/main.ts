@@ -5,7 +5,7 @@ import { issuesFor, type ConvertResult, type OutputFile } from "./core/convert";
 import type { ModelRegion } from "./core/model";
 import { isKind } from "./core/types";
 import { SUPPORTED, type JobResult } from "./shared/api";
-import { convertOnServer, decide, editSpan, retryRegion } from "./browser/api";
+import { cancelJob, convertOnServer, decide, editSpan, retryRegion } from "./browser/api";
 
 const MAX_MB = 25;
 
@@ -19,6 +19,7 @@ const shell = $("shell");
 const status = $("status");
 const form = $<HTMLFormElement>("form");
 const go = $<HTMLButtonElement>("go");
+const cancel = $<HTMLButtonElement>("cancel");
 const reconvert = $<HTMLButtonElement>("reconvert");
 const labelInput = $<HTMLInputElement>("label");
 const captionInput = $<HTMLInputElement>("caption");
@@ -27,6 +28,7 @@ let file: File | null = null;
 let lastHTML = "";
 /** The server job behind the shown result; review actions act on it. */
 let jobId = "";
+let action = 0;
 let current: ConvertResult | null = null;
 let objectUrls: string[] = [];
 
@@ -113,12 +115,16 @@ drop.addEventListener("drop", (e) => setFile((e as DragEvent).dataTransfer?.file
 
 /* ── Convert ────────────────────────────────────── */
 async function run(transcriptText?: string) {
+  if (shell.classList.contains("busy")) return;
   if (!file) return say("Choose a screenshot first.", true);
   const kind = new FormData(form).get("kind")?.toString() ?? "terminal";
   if (!isKind(kind)) return say("Choose a supported screenshot type.", true);
 
+  action++;
   shell.classList.add("busy");
   go.disabled = reconvert.disabled = true;
+  cancel.hidden = false;
+  cancel.disabled = true;
 
   try {
     const result = await convertOnServer(file, {
@@ -127,7 +133,7 @@ async function run(transcriptText?: string) {
       caption: captionInput.value,
       transcript: transcriptText,
       editorWindow: $<HTMLInputElement>("window").checked,
-    }, (message) => say(message), (id) => (jobId = id));
+    }, (message) => say(message), (id) => { jobId = id; cancel.disabled = false; });
     if (/\.tiff?$/i.test(file.name)) $<HTMLImageElement>("orig").src = result.imageDataUrl;
     show(result, result.preview);
     say(readyText(result));
@@ -136,6 +142,7 @@ async function run(transcriptText?: string) {
     say(`Conversion failed: ${msg}`, true);
   } finally {
     shell.classList.remove("busy");
+    cancel.hidden = true;
     go.disabled = reconvert.disabled = false;
   }
 }
@@ -145,6 +152,19 @@ form.onsubmit = (e) => {
   void run();
 };
 reconvert.onclick = () => void run($<HTMLTextAreaElement>("transcript").value);
+
+cancel.onclick = async () => {
+  const requestAction = action;
+  cancel.disabled = true;
+  try {
+    const job = await cancelJob(jobId);
+    if (requestAction === action && shell.classList.contains("busy") && job.status === "failed") say(job.error, true);
+  } catch (error) {
+    if (requestAction !== action || !shell.classList.contains("busy")) return;
+    say(`Could not cancel: ${error instanceof Error ? error.message : String(error)}`, true);
+    cancel.disabled = false;
+  }
+};
 
 /* ── Show results ───────────────────────────────── */
 function downloadButton(out: OutputFile, text: string): HTMLAnchorElement {
@@ -258,8 +278,11 @@ function button(text: string, onClick: () => void, className = ""): HTMLButtonEl
 }
 
 /** Run one review action against the server and show the new result. */
-async function act(work: () => Promise<JobResult>, busy: string) {
-  if (!jobId) return;
+async function act(work: () => Promise<JobResult>, busy: string, cancellable = false) {
+  if (!jobId || shell.classList.contains("busy")) return;
+  action++;
+  cancel.hidden = !cancellable;
+  cancel.disabled = true;
   shell.classList.add("busy");
   say(busy);
   try {
@@ -270,6 +293,7 @@ async function act(work: () => Promise<JobResult>, busy: string) {
     say(`That didn't work: ${err instanceof Error ? err.message : String(err)}`, true);
   } finally {
     shell.classList.remove("busy");
+    cancel.hidden = true;
   }
 }
 
@@ -311,7 +335,7 @@ function regionCard(region: ModelRegion): HTMLLIElement {
   const actions = el("div", "actions");
   actions.append(
     button("Looks right", () => void act(() => decide(jobId, region.id, "approved"), "Saving…"), "primary"),
-    button("Doesn't look right — focus here", () => void act(() => retryRegion(jobId, region.id, hint.value, (m) => say(m)), `Reading ${region.id} again…`)),
+    button("Doesn't look right — focus here", () => void act(() => retryRegion(jobId, region.id, hint.value, (m) => say(m), () => { cancel.disabled = false; }), `Reading ${region.id} again…`, true)),
     hint,
     button("Skip", () => void act(() => decide(jobId, region.id, "skipped"), "Saving…")),
   );

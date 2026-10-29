@@ -241,3 +241,6 @@ input[type=text]:focus, textarea:focus { outline: none; border-color: var(--acce
 .decisions p { margin: 8px 0; }
 
 .drop:focus-within { outline: 3px solid var(--coral); outline-offset: 4px; }
+
+.btn[hidden] { display: none; }
+#cancel { margin-top: 8px; }

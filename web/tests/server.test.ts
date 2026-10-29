@@ -192,6 +192,47 @@ describe("local conversion API / Python parity", () => {
     expect((await app.inject(`/api/jobs/${id}`)).statusCode).toBe(404);
   });
 
+  it("cancels through the local API, releases queued admission once, and keeps completed jobs", async () => {
+    let resume!: () => void;
+    const gate = new Promise<void>((resolve) => { resume = resolve; });
+    const engine = { recognize: vi.fn(async () => { await gate; return scaledWords; }) };
+    const { app, png } = await setup(engine);
+    const cancel = (id: string, headers = {}) => app.inject({ method: "POST", url: `/api/jobs/${id}/cancel`, headers });
+    try {
+      const first = await submit(app, png);
+      await expect.poll(() => engine.recognize.mock.calls.length).toBe(1);
+      const queued = await submit(app, png);
+      await submit(app, png);
+      await submit(app, png);
+      expect((await app.inject(multipart(png))).statusCode).toBe(429);
+      for (const headers of [{ host: "remote.example" }, { origin: "https://remote.example" }, { origin: "null" }]) {
+        expect((await cancel(first, headers)).statusCode).toBe(403);
+      }
+      expect((await cancel("missing")).statusCode).toBe(404);
+      expect((await cancel(queued)).json()).toEqual({ id: queued, status: "failed", error: "Cancelled" });
+      await cancel(queued);
+      await submit(app, png); // One freed slot, even after cancelling twice.
+      expect((await app.inject(multipart(png))).statusCode).toBe(429);
+      expect((await cancel(first)).json()).toEqual({ id: first, status: "failed", error: "Cancelled" });
+      expect((await app.inject(multipart(png))).statusCode).toBe(429); // OCR still owns its admission slot.
+      resume();
+      const last = await submitAfterRelease();
+      await result(app, last);
+      expect((await cancel(last)).json<Job>().status).toBe("completed");
+      expect((await app.inject(`/api/jobs/${first}`)).json<Job>()).toMatchObject({ status: "failed", error: "Cancelled" });
+    } finally { resume(); }
+
+    async function submitAfterRelease() {
+      let id = "";
+      await expect.poll(async () => {
+        const response = await app.inject(multipart(png));
+        if (response.statusCode === 202) id = response.json<{ id: string }>().id;
+        return response.statusCode;
+      }).toBe(202);
+      return id;
+    }
+  });
+
   it("serves the client build without exposing server/source files", async () => {
     const directory = await mkdtemp(join(tmpdir(), "imgtohtml-static-test-"));
     try {

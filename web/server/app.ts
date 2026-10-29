@@ -101,6 +101,12 @@ export async function createApp(options: AppOptions = {}) {
     return job;
   });
 
+  app.post<{ Params: { id: string } }>("/api/jobs/:id/cancel", async (request, reply) => {
+    const job = jobs.cancel(request.params.id);
+    if (!job) return reply.code(404).send({ error: "Job not found or expired. Convert the image again." });
+    return job;
+  });
+
   // Review actions on a finished job. Each returns the job (retry: 202, then poll).
   const review = <B>(path: string, act: (id: string, body: B) => Job | Promise<Job> | void) =>
     app.post<{ Params: { id: string }; Body: B }>(`/api/jobs/:id/${path}`, async (request, reply) => {
