@@ -41,7 +41,7 @@
           <input type="radio" name="kind" id="k-interface" value="interface"><label for="k-interface">UI</label>
         </div>
         <p class="help">UI rebuilds an app window's panels (sidebar, tabs, editor, terminal).</p>
-        <label class="help"><input type="checkbox" id="window" checked> Code: show the editor window (sidebar, tabs, line numbers)</label>
+        <label class="help"><input type="checkbox" id="window" checked> Rebuild app windows (sidebar, tabs, editor)</label>
       </div>
 
       <div class="step">
@@ -88,6 +88,13 @@
           </div>
         </div>
 
+        <div class="decisions" aria-label="Conversion decisions">
+          <p id="layout-status"></p>
+          <div id="vision-corrections" hidden>
+            <p>Vision text corrections:</p>
+            <ul id="correction-list"></ul>
+          </div>
+        </div>
         <ul class="issues" id="issues" aria-label="Review notes"></ul>
 
         <section class="review" id="review" aria-labelledby="review-title" hidden>

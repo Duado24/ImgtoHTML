@@ -159,6 +159,11 @@ function show(result: ConvertResult, preview: OutputFile) {
   current = result;
   renderReview(result);
   const { review } = result;
+  $("layout-status").textContent = `Renderer: ${review.layout_status.renderer}.${review.layout_status.reason ? ` Layout not used: ${review.layout_status.reason}.` : ""}`;
+  const corrections = review.vision?.corrected ?? [];
+  $("vision-corrections").hidden = corrections.length === 0;
+  $("correction-list").replaceChildren(...corrections.map(({ from, to }) => el("li", "", `${from} \u2192 ${to}`)));
+
 
   $("s-lines").textContent = String(result.lineCount);
   $("s-low").textContent = String(result.lowConfidenceCount);
