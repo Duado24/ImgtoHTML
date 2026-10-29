@@ -65,3 +65,20 @@ describe("lookalike corrections", () => {
     expect(fixes).toEqual([{ box: expect.any(Object), from: "HIML", to: "HTML" }]);
   });
 });
+
+describe("lookalike words on lines that don't line up", () => {
+  const strip = [{ ...words[0]!, text: "Preview" }, { ...words[1]!, text: "packagejson", confidence: 90 }, { ...words[2]!, text: "ImgtoHTML" }];
+  const tabs = () => buildModel(300, 40, "diagram", { kind: "leaf", box: { x: 0, y: 0, width: 300, height: 40 }, background: [0, 0, 0], words: strip }, strip);
+
+  it("finds the one vision word that differs only by lookalikes", () => {
+    // A tab bar read one tab per line: no line matches OCR's single line.
+    const merged = mergeVision(tabs(), [{ regionId: "r1", role: "tabs", text: "Preview\n{ } package.json  X\n🌐 ImgtoHTML" }]);
+    const span = merged.regions[0]!.lines[0]!.spans[1]!;
+    expect(span.alternatives).toEqual([{ source: "vision", text: "package.json", confidence: null }]);
+    expect(lookalikeFixes(merged).map((f) => f.to)).toEqual(["package.json"]);
+  });
+  it("offers nothing when more than one vision word fits", () => {
+    const merged = mergeVision(tabs(), [{ regionId: "r1", role: "tabs", text: "Preview\npackage.json package,json\nImgtoHTML" }]);
+    expect(merged.regions[0]!.lines[0]!.spans[1]!.alternatives).toEqual([]);
+  });
+});

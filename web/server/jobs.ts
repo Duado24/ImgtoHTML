@@ -111,13 +111,23 @@ export class Jobs {
       const review = { ...result.review, layout_status: status, server_build: BUILD_ID };
       result = { ...result, review, reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) } };
       if (this.usesVision) {
-        const readings = session.readings.flatMap((reading) => {
+        // Each reading goes to the region it overlaps most. Several readings
+        // can share one region (a layout's tabs, breadcrumb and code inside
+        // one OCR panel): their text joins top to bottom, and the largest
+        // names the region.
+        const byRegion = new Map<string, Reading[]>();
+        for (const reading of session.readings) {
           const best = result.model.regions.reduce<{ id: string; area: number } | null>((top, r) => {
             const area = overlap(r.box, reading.box);
             return area > (top?.area ?? 0) ? { id: r.id, area } : top;
           }, null);
-          return best ? [{ regionId: best.id, role: reading.role, text: reading.text }] : [];
-        });
+          if (best) byRegion.set(best.id, [...(byRegion.get(best.id) ?? []), reading]);
+        }
+        const readings = [...byRegion].map(([regionId, rs]) => ({
+          regionId,
+          role: rs.reduce((a, b) => (b.box.width * b.box.height > a.box.width * a.box.height ? b : a)).role,
+          text: [...rs].sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x).map((r) => r.text).join("\n"),
+        }));
         result = addVision(result, this.vision.name, readings, session.visionError);
       }
       return result;
@@ -202,8 +212,15 @@ export class Jobs {
           }
         }
         progress("Checking with the vision model…");
-        const first = convert({ ...input, pixels: image.pixels, animated: image.animated, words });
-        const regions = first.model.regions.filter((r) => r.lines.length).map(({ id, box }) => ({ id, box }));
+        const first = convert({ ...input, pixels: image.pixels, animated: image.animated, words, layout: session.layout?.layout });
+        // With a layout, the vision model reads each component that holds
+        // text (sidebar, tab bar, breadcrumb, code…) on its own: a tab bar
+        // read together with the code below it rarely lines up with OCR's lines.
+        const layout = first.review.layout;
+        const leaves = layout?.components.filter((c) => !layout.components.some((k) => k.parent === c.id) && words.some((w) => centerIn(w, c.box))) ?? [];
+        const regions = leaves.length
+          ? leaves.map(({ id, box }) => ({ id: `layout-${id}`, box }))
+          : first.model.regions.filter((r) => r.lines.length).map(({ id, box }) => ({ id, box }));
         try {
           session.readings = await this.readVision(session, regions);
           if (input.kind === "diagram" && this.vision.describeDiagram) {

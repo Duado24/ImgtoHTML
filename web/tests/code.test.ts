@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { cleanCode, detectLanguage, highlightCode, measuredTheme } from "../src/core/code";
 import { lineText } from "../src/core/paint";
 import { CODE_THEME } from "../src/core/theme";
-import { letterInk } from "../src/core/convert";
+import { highlightClipped, letterInk } from "../src/core/convert";
 
 describe("cleanCode", () => {
   it("removes gutter line numbers and keeps indentation after them", () => {
@@ -112,5 +112,19 @@ describe("measuredTheme", () => {
   it("keeps the theme's color without enough letters to measure", () => {
     const { measured } = measuredTheme([[{ text: '"a":' }]], "json", CODE_THEME, (w) => [ink(w)]);
     expect(measured).not.toContain("sky");
+  });
+});
+
+describe("highlighting lines cut off at the panel edge", () => {
+  const lines = ['{', '  "description": "Local screenshot to Canvas HTML app, with a TypeScript client and Nod', '  "type": "module",', '}'];
+  const keyColor = (painted: ReturnType<typeof highlightClipped>, i: number) => painted[i]!.runs.find((r) => r.text.includes('"type"'))?.color;
+
+  it("keeps later keys colored as keys after a cut-off string", () => {
+    const painted = highlightClipped(lines, [false, true, false, false], "json", CODE_THEME);
+    expect(keyColor(painted, 2)).toEqual(CODE_THEME.colors.sky);
+    expect(painted[1]!.runs.map((r) => r.text).join("")).toBe(lines[1]); // no quote added to the text
+  });
+  it("without knowing the line is cut off, the string runs on (why this exists)", () => {
+    expect(keyColor(highlightClipped(lines, [], "json", CODE_THEME), 2)).not.toEqual(CODE_THEME.colors.sky);
   });
 });

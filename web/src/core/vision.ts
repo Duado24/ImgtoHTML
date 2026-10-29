@@ -67,7 +67,19 @@ function mergeRegion(region: ModelRegion, reading: RegionReading): ModelRegion {
     return { ...line, spans };
   });
 
-  return { ...region, role: reading.role || region.role, lines, flags, review: flags.length ? "pending" : region.review };
+  // Lines that didn't line up (spacing, a tab bar read one tab per line) can
+  // still have a word the vision model read with only lookalikes changed:
+  // offer it when exactly one of its words fits.
+  const seenWords = new Set(visionLines.flat());
+  const matched = lines.map((line) => ({ ...line, spans: line.spans.map((span): Span => {
+    if (span.alternatives.some((a) => a.source === "vision") || seenWords.has(span.text)) return span;
+    const fits = [...seenWords].filter((w) => onlyLookalikes(span.text, w));
+    if (fits.length !== 1) return span;
+    flags.push({ reason: "sources-disagree", spanId: span.id, detail: `OCR read "${span.text}", vision model read "${fits[0]}"` });
+    return { ...span, alternatives: [...span.alternatives, { source: "vision", text: fits[0]!, confidence: null }] };
+  }) }));
+
+  return { ...region, role: reading.role || region.role, lines: matched, flags, review: flags.length ? "pending" : region.review };
 }
 
 /** Characters OCR commonly swaps in small screen text, both ways. */

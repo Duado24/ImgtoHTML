@@ -236,6 +236,14 @@ When OCR was unsure of a word (below 95%) and the vision model read it with
 only lookalike characters changed (I/T, I/l/1, O/0, comma/period, curly/straight
 quotes, or one dropped period), the vision reading is used and listed in
 `review.vision.corrected`. Any other disagreement stays a review suggestion.
+With a layout, the vision model reads each component that holds text
+(sidebar, tab bar, breadcrumb, code) on its own. A word on a line that doesn't
+line up with the vision reading (different spacing, one tab per line) still
+gets the one vision word, if exactly one, that differs only by lookalikes.
+
+Code lines cut off at the panel's right edge keep their cut-off text, but for
+highlighting only, a string they leave open is closed at the edge; otherwise it
+would run on and swap every later key and value.
 
 Every component, including empty containers, gets its dominant background from
 its source rectangle. UI font choice uses OCR symbol advances where enough are

@@ -13,7 +13,7 @@ import { renderDiagram, unconfirmedLabels, type Diagram } from "./diagram";
 import { codeRows, renderEditorWindow } from "./editor-window";
 import { colorRoles } from "./terminal";
 import { mergeVision, type RegionReading } from "./vision";
-import { CODE_THEME, applyTheme, themeFor } from "./theme";
+import { CODE_THEME, applyTheme, themeFor, type Theme } from "./theme";
 import { colorsUsed, mainColor, measureLooks, paintLines, plainLines, type PaintedLine, type WordLook } from "./paint";
 import { learnedUsernames, sanitizeLines, sanitizeText } from "./privacy";
 import { segment, type Leaf, type Region } from "./regions";
@@ -188,6 +188,50 @@ const LAID_OUT: readonly string[] = ["ide", "code-editor", "website", "desktop"]
 /** How far (sum of channel differences) a pixel must be from the background to count as ink. */
 const INK = 60;
 
+/** A code panel's OCR rows that start with a line number, left to right, one
+ *  per code line; null unless there are exactly `lines` of them. */
+function numberedRows(words: readonly OcrWord[], lines: number): OcrWord[][] | null {
+  const numbered = layoutWords(words).rows.map((r) => r.words.map((w) => w.word).sort((a, b) => a.x - b.x)).filter((ws) => /^\d{1,4}$/.test(ws[0]?.text ?? ""));
+  return numbered.length === lines ? numbered : null;
+}
+
+/** Per code line, whether its text runs to the panel's right edge, cut off
+ *  there in the screenshot (within 1.5 characters of the edge). */
+function clippedLines(words: readonly OcrWord[], box: Box, lines: number): boolean[] {
+  const numbered = numberedRows(words, lines);
+  if (!numbered) return [];
+  const char = middle(words.map((w) => w.width / Math.max(1, w.text.length)));
+  return numbered.map((ws) => Math.max(...ws.map((w) => w.x + w.width)) >= box.x + box.width - char * 1.5);
+}
+
+/** The quote a line leaves open at its end, or null. */
+function openQuote(line: string): string | null {
+  let open: string | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]!;
+    if (c === "\\") i++;
+    else if (open === null && (c === '"' || c === "'")) open = c;
+    else if (c === open) open = null;
+  }
+  return open;
+}
+
+/** Highlight code whose lines may be cut off at the panel edge. A string cut
+ *  off mid-line would run on into the next lines and swap every later key and
+ *  value, so for highlighting only, each cut-off line's open string is closed
+ *  at the edge; the added quote is not drawn. */
+export function highlightClipped(lines: readonly string[], clipped: readonly boolean[], language: string | null, theme: Theme): PaintedLine[] {
+  const closers = lines.map((l, i) => (clipped[i] ? openQuote(l) : null));
+  const painted = highlightCode(lines.map((l, i) => l + (closers[i] ?? "")).join("\n"), language, theme);
+  return painted.map((line, i) => {
+    if (!closers[i]) return line;
+    const runs = [...line.runs];
+    const last = runs.at(-1);
+    if (last?.text.endsWith(closers[i]!)) runs[runs.length - 1] = { ...last, text: last.text.slice(0, -1) };
+    return { ...line, runs: runs.filter((r) => r.text) };
+  });
+}
+
 /** Distance from the panel background at which a code line's own background counts. */
 const LINE_BACKGROUND = 12;
 
@@ -197,8 +241,8 @@ const LINE_BACKGROUND = 12;
  *  match the code lines one for one, or when most lines would differ (then
  *  it's the panel color that was mismeasured, not a highlight). */
 function codeLineBackgrounds(pixels: Pixels, words: readonly OcrWord[], box: Box, panel: RGB, lines: number): (string | undefined)[] {
-  const numbered = layoutWords(words).rows.map((r) => r.words.map((w) => w.word).sort((a, b) => a.x - b.x)).filter((ws) => /^\d{1,4}$/.test(ws[0]?.text ?? ""));
-  if (numbered.length !== lines) return [];
+  const numbered = numberedRows(words, lines);
+  if (!numbered) return [];
   const backgrounds = numbered.map((ws) => {
     const top = Math.min(...ws.map((w) => w.y)), bottom = Math.max(...ws.map((w) => w.y + w.height));
     const color = dominantColor(pixels, { x: box.x, y: top, width: box.width, height: Math.max(1, bottom - top) });
@@ -325,7 +369,7 @@ export function convert(input: ConvertInput): ConvertResult {
         const ocrRows = layoutWords(panelWords).rows.map((r) => r.words.map((w) => w.word));
         const { theme: own, measured } = measuredTheme(ocrRows, language, CODE_THEME, (w, i) => letterInk(pixels, w as OcrWord, i, looks.get(w as OcrWord)?.background));
         const palette = { ...own, background: bg, colors: Object.fromEntries(Object.entries(own.colors).map(([k, color]) => [k, fixContrast(color, bg)])) as typeof CODE_THEME.colors };
-        const highlighted = highlightCode(normalized.join("\n"), language, palette).map((line) => ({ ...line, runs: line.runs.map((run) => ({ ...run, color: run.color ? fixContrast(run.color, bg) : undefined })) }));
+        const highlighted = highlightClipped(normalized, clippedLines(panelWords, box, normalized.length), language, palette).map((line) => ({ ...line, runs: line.runs.map((run) => ({ ...run, color: run.color ? fixContrast(run.color, bg) : undefined })) }));
         painted.push(...highlighted);
         const details: NonNullable<Review["code"]> = { editor_window: true, language, line_numbers_removed: cleaned.lineNumbersRemoved, lines_outside_code: cleaned.linesOutsideCode, panels_left_out: 0, quotes_straightened: cleaned.quotesStraightened, braces_repaired: repaired.repaired, duplicate_quotes_removed: normalized.filter((l, i) => l !== repaired.lines[i]).length, indent_unit: cleaned.indentUnit, lines_snapped: cleaned.linesSnapped };
         codePanels.push({ component: component.id, cleanup: details, colors_measured: measured });
