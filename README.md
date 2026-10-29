@@ -6,7 +6,7 @@ UI displays the draft and offers downloads. The server binds only to
 **127.0.0.1**. Conversion uses no external services, network models or CDNs.
 
 Compare the original screenshot with the draft before publishing it in Canvas.
-OCR, whitespace reconstruction and identity masking still require review.
+OCR text, reconstructed layout and identity masking still require review.
 
 ## Install
 
@@ -67,20 +67,21 @@ at the same time: they use the same API port.
 Upload PNG, JPEG, GIF, WebP, BMP or TIFF, up to **25 MB**. GIFs use the final
 composited frame. Blank label/caption fields use the converter's defaults.
 Edit the transcript and re-convert when needed; OCR still runs to measure
-colors. This migration preserves the existing UI design, color logic and
-Canvas renderer.
+colors. Review notes show the selected renderer and any layout fallback reason.
 
 ## Output
 
-The UI offers four downloads, preserving the source extension in the HTML name:
+The UI offers five downloads, preserving the source extension in the HTML name:
 
     Media_example.gif.html
     example_transcript.txt
     example_review.json
+    example_model.json
     example_preview.html
 
-Only Media_*.html is the Canvas fragment: inline styles, one div per text
-line, and no style/script/pre elements. The comparison page embeds the original
+Only Media_*.html is the Canvas fragment: inline styles and no style/script/pre
+elements. Its structure depends on the selected renderer. Model JSON records
+the structured screenshot model and region review states. The comparison page embeds the original
 image beside the reconstruction and uses its own local style block. Original
 image pixels are not privacy-masked; the transcript, reconstructed text and
 review words use the existing home-path and learned-email masking rules.
@@ -102,9 +103,9 @@ architecture and parity coverage.
 
 ## Repository layout
 
-    web/src/core/       Pure, browser-free conversion logic (unchanged)
+    web/src/core/       Pure, browser-free conversion logic
     web/src/browser/    Client API calls
-    web/src/main.ts     Existing UI
+    web/src/main.ts     Browser UI
     web/server/         Fastify, image decoding, job queue and OCR adapters
     web/tests/          Core, image, OCR-interface, client and server tests
     imgtohtml/          Python v1.2.6 reference implementation (preserved)
