@@ -167,9 +167,9 @@ export class Jobs {
             const session = entry.session!;
             const report = await validateVisual(result.html, session.image.png, result.review.layout, session.image.pixels.width, session.image.pixels.height);
             result = { ...result, html: report.html, htmlFile: { ...result.htmlFile, content: report.html }, review: { ...result.review,
-              canvas_issues: checkCanvasSafe(report.html), visual_validation: { discrepancies: report.discrepancies, pixelMeanAbsoluteError: report.pixelMeanAbsoluteError, repaired: report.repaired } } };
+              canvas_issues: checkCanvasSafe(report.html), visual_validation: { status: report.discrepancies.length ? "failed" : "passed", discrepancies: report.discrepancies, pixelMeanAbsoluteError: report.pixelMeanAbsoluteError, repaired: report.repaired } } };
           } catch (error) {
-            result.review.visual_validation = { discrepancies: [], pixelMeanAbsoluteError: 0, repaired: false, error: message(error) };
+            result.review.visual_validation = { status: "unavailable", discrepancies: [], pixelMeanAbsoluteError: null, repaired: false, error: message(error) };
           }
           result.reviewFile = { ...result.reviewFile, content: JSON.stringify(result.review, null, 2) };
           result.preview = previewPage(result, result.imageDataUrl);

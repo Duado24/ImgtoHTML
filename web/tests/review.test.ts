@@ -148,3 +148,25 @@ describe("layout session integration", () => {
     expect(first.review.layout_status.reason).toBe("the vision model is off");
   });
 });
+
+
+describe("visual validation reporting", () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.doUnmock("../server/visual-validation"); });
+  const vision: VisionModel = { name: "test", analyze: async () => [], detectLayout: async () => ({ attempts: [], layout: { application: "ide", components: [
+    { id: "editor", type: "editor", parent: null, box: { x: 0, y: 0, width: 200, height: 40 } },
+  ] } }) };
+  it.each([false, true])("reports measured discrepancies (remaining: %s)", async (failed) => {
+    vi.stubEnv("IMGTOHTML_VALIDATE_LAYOUT", "1");
+    vi.doMock("../server/visual-validation", () => ({ validateVisual: async (html: string) => ({ html, discrepancies: failed ? [{ component: "editor", error: 0.2 }] : [], pixelMeanAbsoluteError: 0.12, repaired: false }) }));
+    const { first } = await setup(vision);
+    expect(first.review.visual_validation).toMatchObject({ status: failed ? "failed" : "passed", pixelMeanAbsoluteError: 0.12 });
+    expect(JSON.parse(first.reviewFile.content).visual_validation).toEqual(first.review.visual_validation);
+  });
+  it.each(["browser missing", "validation threw"])("reports unavailable with no measurement when %s", async (error) => {
+    vi.stubEnv("IMGTOHTML_VALIDATE_LAYOUT", "1");
+    vi.doMock("../server/visual-validation", () => ({ validateVisual: async () => { throw new Error(error); } }));
+    const { first } = await setup(vision);
+    expect(first.review.visual_validation).toEqual({ status: "unavailable", discrepancies: [], pixelMeanAbsoluteError: null, repaired: false, error });
+    expect(JSON.parse(first.reviewFile.content).visual_validation).toEqual(first.review.visual_validation);
+  });
+});

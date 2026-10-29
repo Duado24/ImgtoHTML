@@ -59,7 +59,7 @@ export interface Review {
   };
   /** Server only: the build that produced this result (see /api/version). */
   server_build?: string;
-  visual_validation?: { discrepancies: { component: string; error: number }[]; pixelMeanAbsoluteError: number; repaired: boolean; error?: string };
+  visual_validation?: { status: "passed" | "failed" | "unavailable"; discrepancies: { component: string; error: number }[]; pixelMeanAbsoluteError: number | null; repaired: boolean; error?: string };
   low_confidence_words: UncertainWord[];
   original_colors: { background: string; foreground: string };
   contrast_changes: ColorChange[];
