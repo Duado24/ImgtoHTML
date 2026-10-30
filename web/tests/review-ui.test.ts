@@ -147,6 +147,18 @@ it("guides a teacher through original crops, approvals, fixes, skips and a focus
     await browserExpect(page.locator("#s-low")).toHaveText("3");
     await browserExpect(page.locator("#review-count")).toHaveText("0 of 3 checked");
     await browserExpect(page.locator("#progress")).toHaveAttribute("aria-valuenow", "100");
+    // The checklist is a dropdown: closed at first, with its heading and count still showing.
+    await browserExpect(page.locator("#review-title")).toBeVisible();
+    await browserExpect(page.locator("#s-low")).toBeVisible();
+    await browserExpect(page.locator("#regions")).not.toBeVisible();
+    await page.locator("#review > summary").click();
+    await browserExpect(page.locator("#regions")).toBeVisible();
+    // The ChatGPT button is a placeholder until the GPT is published.
+    await browserExpect(page.locator("#plugin")).toContainText("Coming soon");
+    await browserExpect(page.locator("#plugin")).toHaveAttribute("aria-disabled", "true");
+    // Playwright won't click an aria-disabled element; a person can, and gets the note.
+    await page.locator("#plugin").dispatchEvent("click");
+    await browserExpect(page.locator("#status")).toContainText("coming soon");
     expect(await page.locator("#regions > li").first().getAttribute("data-region")).toBe("r3");
     await browserExpect(page.locator('#regions [data-region="r1"] .review-reason')).toHaveText("The text is blurry here: “world”.");
     await browserExpect(page.locator('#regions [data-region="r2"] .review-reason')).toContainText("1 (one)");

@@ -207,7 +207,19 @@ input[type=text]:focus, textarea:focus { outline: none; border-color: var(--acce
 }
 
 /* ── Review loop ────────────────────────────────────── */
+/* White in both themes, so it reads as a separate, optional destination. */
+.plugin-btn { background: #FFFFFF; color: #161614; border-color: #C6C1B2; text-transform: none; letter-spacing: 0; font-weight: 600; cursor: pointer; text-decoration: none; }
+.plugin-btn:hover { border-color: #161614; }
+.plugin-btn small { margin-left: 6px; padding: 2px 6px; border-radius: 3px; background: #EDEAE0; color: #4A4A44; font-size: 11px; font-weight: 500; }
+.plugin-btn[aria-disabled="true"] { cursor: help; }
+
 .review { border-bottom: 1px solid var(--line); padding: 18px; }
+/* The checklist is a dropdown: the summary keeps the heading and the count visible. */
+.review-summary { cursor: pointer; list-style: none; margin-bottom: 0; }
+.review-summary::-webkit-details-marker { display: none; }
+.review-summary::before { content: "▸"; color: var(--muted); font-size: 14px; flex: 0 0 auto; }
+.review[open] > .review-summary { margin-bottom: 12px; }
+.review[open] > .review-summary::before { content: "▾"; }
 .review-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .review-head h2 { font-size: 19px; line-height: 1.4; margin: 0; flex: 1 1 260px; }
 .review-head p { margin: 0; }

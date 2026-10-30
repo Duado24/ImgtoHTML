@@ -15,6 +15,21 @@ import { NullVisionModel, OllamaVisionModel, type VisionModel } from "./vision";
 export const HOST = "127.0.0.1";
 export const PORT = 3000;
 
+/** Scripts only from this app; no plugins, no framing by other pages. Inline
+ *  style attributes stay allowed: the converted HTML (shown in the preview
+ *  frame) is made of them. */
+export const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
 interface AppOptions {
   ocr?: OcrEngine;
   /** Default: Ollama on this computer, unless IMGTOHTML_VISION=off. */
@@ -49,6 +64,9 @@ export async function createApp(options: AppOptions = {}) {
   app.addHook("onSend", async (request, reply) => {
     if (request.url.startsWith("/api/")) reply.header("Cache-Control", "no-store");
     reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+    reply.header("X-Frame-Options", "DENY");
+    reply.header("Referrer-Policy", "no-referrer");
   });
 
   await app.register(multipart, {
@@ -133,7 +151,11 @@ export async function createApp(options: AppOptions = {}) {
   app.setErrorHandler<FastifyError>((error, _request, reply) => {
     const status = typeof error.statusCode === "number" ? error.statusCode : 500;
     if (status >= 500) app.log.error(error);
-    reply.code(status).send({ error: status === 413 ? "Upload limit exceeded (image: 25 MB; text field: 1 MB)." : error.message });
+    // Internal errors are logged, not shown: their messages can hold file paths.
+    const message = status === 413 ? "Upload limit exceeded (image: 25 MB; text field: 1 MB)."
+      : status >= 500 ? "Something went wrong on this computer's server. Try again; if it keeps happening, restart ImgtoHTML."
+      : error.message;
+    reply.code(status).send({ error: message });
   });
 
   if (options.clientRoot !== false) {

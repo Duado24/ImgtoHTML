@@ -51,4 +51,23 @@ describe("server image decoding", () => {
     await expect(decodeImage(png, "a.tiff")).rejects.toThrow("does not match");
     await expect(decodeImage(png, "a.svg")).rejects.toThrow("Unsupported");
   });
+
+  it("rejects scripts and web pages, whatever their name", async () => {
+    const php = Buffer.from('<?php system($_GET["c"]); ?>');
+    for (const name of ["shell.php", "shell.phtml", "page.html", "image.svg", "run.exe", "noextension"]) {
+      await expect(decodeImage(php, name)).rejects.toThrow("Unsupported");
+    }
+    // Renamed to look like an image: the contents still have to be one.
+    for (const name of ["shell.png", "shell.php.png", "shell.jpg", "shell.gif"]) {
+      await expect(decodeImage(php, name)).rejects.toThrow("Cannot decode");
+    }
+  });
+
+  it("re-encodes a real image with a script appended, dropping the extra bytes", async () => {
+    const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: "white" } }).png().toBuffer();
+    const polyglot = Buffer.concat([png, Buffer.from('<?php system($_GET["c"]); ?>')]);
+    const result = await decodeImage(polyglot, "photo.png");
+    expect(result.png.includes("<?php")).toBe(false);
+    expect((await sharp(result.png).metadata()).format).toBe("png");
+  });
 });

@@ -152,6 +152,31 @@ describe("local conversion API / Python parity", () => {
     expect((await app.inject(multipart(png))).statusCode).toBe(202);
   });
 
+  it("rejects PHP and other scripts, even renamed as images, without reading them", async () => {
+    const { app, engine } = await setup();
+    const php = Buffer.from('<?php system($_GET["c"]); ?>');
+    for (const name of ["shell.php", "shell.png", "shell.php.png", "../../shell.php"]) {
+      const response = await app.inject(multipart(php, {}, name));
+      expect(response.statusCode).toBe(400);
+      expect(response.body).not.toContain("<?php");
+    }
+    expect(engine.recognize).not.toHaveBeenCalled();
+  });
+
+  it("sends security headers and hides internal error details", async () => {
+    const { app } = await setup();
+    app.get("/api/boom", async () => { throw new Error("ENOENT: /home/alice/secret/path"); });
+    const response = await app.inject("/api/version");
+    expect(response.headers["content-security-policy"]).toContain("script-src 'self'");
+    expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+    expect(response.headers["x-frame-options"]).toBe("DENY");
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["referrer-policy"]).toBe("no-referrer");
+    const failed = await app.inject("/api/boom");
+    expect(failed.statusCode).toBe(500);
+    expect(failed.body).not.toContain("/home/alice");
+  });
+
   it("reports failed jobs, recovers for the next job and closes the engine", async () => {
     const engine = { recognize: vi.fn().mockRejectedValueOnce(new Error("OCR failed")).mockResolvedValue(scaledWords), close: vi.fn() };
     const { app, png } = await setup(engine);

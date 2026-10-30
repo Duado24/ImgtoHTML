@@ -36,6 +36,26 @@ let selectedRegion: string | null = null;
 let reviewImage = new Image();
 let displayedPercent = 0;
 
+/* ── Refine with ChatGPT: the optional GPT, opened in a new tab.
+   Empty until the GPT is published; the button then says "Coming soon". ── */
+const PLUGIN_URL = "";
+const plugin = $<HTMLAnchorElement>("plugin");
+if (PLUGIN_URL) {
+  plugin.href = PLUGIN_URL;
+  plugin.target = "_blank";
+  plugin.rel = "noopener noreferrer";
+  plugin.removeAttribute("role");
+  plugin.removeAttribute("aria-disabled");
+  plugin.removeAttribute("tabindex");
+  $("plugin-soon").remove();
+  // The app keeps everything local; ChatGPT doesn't, so say so before they paste.
+  plugin.title = "Opens ChatGPT in a new tab. What you paste there leaves this computer.";
+} else {
+  const soon = () => say("Refine with ChatGPT is coming soon. For now, use the checklist below or edit the Transcript tab.");
+  plugin.onclick = (e) => { e.preventDefault(); soon(); };
+  plugin.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); soon(); } };
+}
+
 /* ── Theme: solid black or solid white. Follows the computer's
    light/dark setting until the button is used (then remembered). ── */
 const root = document.documentElement;
@@ -457,6 +477,7 @@ function renderReview(result: ConvertResult) {
       Object.assign(box.style, { left: pct(r.box.x / width), top: pct(r.box.y / height), width: pct(r.box.width / width), height: pct(r.box.height / height) });
       box.onclick = () => {
         highlight(r.id);
+        $<HTMLDetailsElement>("review").open = true;
         const card = document.getElementById(`check-${r.id}`);
         card?.scrollIntoView({ block: "nearest", behavior: "instant" });
         card?.focus({ preventScroll: true });
