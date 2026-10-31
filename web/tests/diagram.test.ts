@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkCanvasSafe } from "../src/core/canvas";
-import { renderDiagram, type Diagram } from "../src/core/diagram";
+import { diagramRows, renderDiagram, type Diagram } from "../src/core/diagram";
 
 const flowchart: Diagram = {
   summary: "How a program checks a button press.",
@@ -34,6 +34,40 @@ describe("renderDiagram", () => {
     }, "L", null);
     expect(html).toContain("<li>Import libraries:<br>from gpiozero import Button</li>");
     expect(html).toContain("<li>Import libraries: → End</li>");
+  });
+
+  it("draws the nodes as cards in flow order, with each arrow and a text-description dropdown", () => {
+    const html = renderDiagram(flowchart, "Flowchart", null);
+    expect(html.indexOf(">Start<")).toBeLessThan(html.indexOf(">Button pressed?<"));
+    expect(html).toContain("→ <strong>yes:</strong> Turn on LED");
+    expect(html).toContain("↩ <strong>no:</strong> Start");
+    expect(html).toMatch(/<details[^>]*>\s*<summary[^>]*>Text description<\/summary>/);
+    expect(html).not.toMatch(/<(?:table|svg)\b|position:/i);
+  });
+
+  it("rows follow the flow, or the screenshot's own rows when nodes have boxes", () => {
+    expect(diagramRows(flowchart)).toEqual([["a"], ["b"], ["c"]]);
+    const boxed: Diagram = {
+      summary: "s",
+      nodes: [
+        { id: "o", label: "Order", shape: "entity", box: { x: 400, y: 40, width: 200, height: 200 } },
+        { id: "c", label: "Customer", shape: "entity", box: { x: 20, y: 60, width: 200, height: 160 } },
+        { id: "i", label: "Item", shape: "entity", box: { x: 400, y: 500, width: 200, height: 200 } },
+      ],
+      edges: [],
+    };
+    expect(diagramRows(boxed)).toEqual([["c", "o"], ["i"]]);
+  });
+
+  it("names an entity by its name in arrows and lists its attributes", () => {
+    const html = renderDiagram({
+      summary: "s",
+      nodes: [{ id: "c", label: "Customer: id, name", shape: "entity" }, { id: "o", label: "Order: id", shape: "entity" }],
+      edges: [{ from: "c", to: "o", label: "1..*" }],
+    }, "L", null);
+    expect(html).toContain("id<br>name");
+    expect(html).toContain("→ <strong>1..*:</strong> Order</div>");
+    expect(html).toContain("<li>Customer → Order (1..*)</li>");
   });
 
   it("escapes labels", () => {

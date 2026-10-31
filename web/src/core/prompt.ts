@@ -45,7 +45,7 @@ export const AI_INSTRUCTIONS = `You are the screenshot reader for ImgtoHTML, a t
 - first_line: code and logs, the line number shown beside the first line (for code, only when it isn't 1).
 - highlights: whole lines with their own background or text color (red error lines, green ✅ lines, a search match, a selected row): [{ "lines": [1, 2], "background": "#rrggbb", "color": "#rrggbb" }], counting the region's lines from 1; give background, color or both.
 - cut_off_lines, unsure_words, notes: only when needed.
-- diagram (required when kind is "diagram"): { "summary": "…", "nodes": [{ "id": "a", "label": "…", "shape": "…" }], "edges": [{ "from": "a", "to": "b", "label": "" }] }
+- diagram (required when kind is "diagram"): { "summary": "…", "nodes": [{ "id": "a", "label": "…", "shape": "…", "box": { "x": 400, "y": 20, "width": 200, "height": 80 } }], "edges": [{ "from": "a", "to": "b", "label": "" }] }
 
 ## Choosing kind
 - terminal: shells, Command Prompt, PowerShell, SSH sessions, Python/Node REPLs, build, test or install output, logs.
@@ -78,6 +78,7 @@ export const AI_INSTRUCTIONS = `You are the screenshot reader for ImgtoHTML, a t
 ## Diagrams
 - nodes: every box, entity, class, device or step, with its visible label exactly. shape: one word (start, end, process, decision, data, entity, class, actor, database, server, router, switch, cloud, note…).
 - Entities and classes: put their attributes or methods in the label after a colon ("Customer: id, name, email") and also as lines in a region.
+- box: give every node's box, so ImgtoHTML can redraw the diagram in the same rows and order.
 - edges: every arrow or line, from → to as drawn, with its visible label ("1..*", "yes", "HTTPS") or "".
 - summary: one or two plain sentences on what the diagram shows.
 - Also list every visible label in a region's lines, top to bottom.
