@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "wsl",
+      "runtimeArgs": ["-d", "ubuntu", "--cd", "/home/duado24/Code/ImgHtml/web", "--", "npm", "run", "dev", "--", "--port", "5173", "--strictPort"],
+      "port": 5173
+    }
+  ]
+}

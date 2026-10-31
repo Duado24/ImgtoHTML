@@ -189,7 +189,7 @@ function show() {
     ...(result.maskedNames ? [{ level: "info" as const, text: `Masked ${result.maskedNames} user ${result.maskedNames === 1 ? "name" : "names"} in home-folder paths and emails as “username”. Check for other names yourself.` }] : []),
     ...(result.notes ? [{ level: "info" as const, text: `The AI's notes: ${result.notes}` }] : []),
     ...warnings.map((w) => ({ level: "warn" as const, text: `Report: ${w}` })),
-    ...(kind === "diagram" ? [{ level: "info" as const, text: "Diagrams become a text description. Upload the screenshot to Canvas too and put this description with it." }] : []),
+    ...(kind === "diagram" ? [{ level: "info" as const, text: "Diagrams become a \"Diagram Description\" dropdown. Upload the screenshot to Canvas as an image and paste this under it." }] : []),
   ];
   const names = { error: "Check", warn: "Warning", info: "Note" } as const;
   $("issues").replaceChildren(...notes.map((n) => {

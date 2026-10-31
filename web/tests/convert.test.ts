@@ -78,7 +78,7 @@ describe("convert", () => {
       diagram: { summary: "A two-step flow.", nodes: [{ id: "a", label: "Start", shape: "start" }, { id: "b", label: "Check", shape: "decision" }], edges: [{ from: "a", to: "b", label: "" }] } }));
     expect(result.renderer).toBe("diagram");
     expect(result.label).toBe("Diagram: A two-step flow.");
-    expect(result.html).toContain("Start → Check");
+    expect(result.html).toContain("From Start to Check");
     expect(result.transcript.startsWith("A two-step flow.")).toBe(true);
   });
 

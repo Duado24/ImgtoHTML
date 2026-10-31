@@ -128,7 +128,7 @@ export function convert(source: ScreenshotReport, options: ConvertOptions = {}):
 
   if (report.kind === "diagram" && report.diagram) {
     renderer = "diagram";
-    html = renderDiagram(report.diagram, label, caption);
+    html = renderDiagram(report.diagram, caption);
     shown = report.regions;
   } else if (report.kind === "terminal") {
     shown = ofType(report, "terminal");

@@ -161,7 +161,11 @@ function checkDiagram(value: unknown, problems: string[]): Diagram | undefined {
       problems.push(`diagram.nodes[${i}] needs text id, label and shape`);
     } else if (ids.has(n.id)) problems.push(`diagram.nodes[${i}]: duplicate id "${n.id}"`);
     else ids.add(n.id);
-    if (isObject(n) && n.box !== undefined && !checkBox(n.box, `diagram.nodes[${i}]`, problems)) delete n.box;
+  }
+  for (const [i, n] of nodes.entries()) {
+    if (isObject(n) && n.group !== undefined && (typeof n.group !== "string" || !ids.has(n.group) || n.group === n.id)) {
+      problems.push(`diagram.nodes[${i}]: group must be the id of another node (the heading it sits under)`);
+    }
   }
   for (const [i, e] of edges.entries()) {
     if (!isObject(e) || typeof e.from !== "string" || typeof e.to !== "string" || typeof e.label !== "string") {
