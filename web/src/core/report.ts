@@ -1,11 +1,8 @@
-/** A screenshot report: what a strong AI (a ChatGPT or Claude plugin) read in
- *  a screenshot, pasted into ImgtoHTML in place of the local vision model's
- *  answers. The AI reports text and structure, which it reads well; the app
- *  keeps measuring colors and spacing from the image itself, and renders,
- *  checks and reviews as usual.
+/** A screenshot report: what an AI (the ChatGPT plugin, or any chat given
+ *  the instructions in prompt.ts) read in a screenshot. ImgtoHTML builds the
+ *  Canvas HTML from it alone; the screenshot itself never reaches the app.
  *
- *  Version 1, as JSON (boxes on a 0–1000 grid over the whole screenshot,
- *  whatever its size, so the AI never needs the pixel dimensions):
+ *  Version 1, as JSON (boxes on a 0–1000 grid over the whole screenshot):
  *
  *    {
  *      "format": "imgtohtml-report", "version": 1,
@@ -15,10 +12,11 @@
  *      "regions": [
  *        { "id": "files", "type": "sidebar", "parent": null,
  *          "box": { "x": 0, "y": 40, "width": 180, "height": 960 },
- *          "lines": ["EXPLORER", "> docs", "v web"] },
+ *          "background": "#181818", "color": "#cccccc",                  // optional
+ *          "lines": ["EXPLORER", "› docs", "⌄ web"] },
  *        { "id": "code", "type": "code", "parent": null,
  *          "box": { "x": 180, "y": 90, "width": 820, "height": 910 },
- *          "lines": ["{", "  \"name\": \"imgtohtml-web\",", "  \"description\": \"Local screenshot to Canvas HTML app, with a TypeScript client and Nod"],
+ *          "lines": ["{", "  \"name\": \"imgtohtml-web\",", "  \"description\": \"Local app and Nod"],
  *          "cut_off_lines": [3], "unsure_words": ["Nod"] }
  *      ],
  *      "diagram": { "summary": "…", "nodes": [...], "edges": [...] },   // diagram only
@@ -26,34 +24,43 @@
  *    }
  *
  *  Each line is exactly what the screenshot shows, leading spaces included.
- *  Text that was erased or hidden in the screenshot stays out: the report
- *  never fills it in. Parsing collects every problem at once, so a designer
- *  can send them all back to the AI in one message. */
+ *  Text that was erased or hidden in the screenshot stays out. Parsing
+ *  collects every problem at once, so a designer can send them all back to
+ *  the AI in one message. */
 
-import { COMPONENTS, APPLICATIONS, checkLayout, type VisionLayout } from "./vision-layout";
 import type { Diagram } from "./diagram";
-import type { ScreenshotModel } from "./model";
-import { onlyLookalikes } from "./vision";
-import { KINDS, type Box, type Kind, type OcrWord } from "./types";
+import { KINDS, type Box, type Kind } from "./types";
 
 export const REPORT_FORMAT = "imgtohtml-report";
 export const REPORT_VERSION = 1;
 
-/** Limits that keep a pasted report from swamping the page or the server. */
+/** What a region is. Code and terminal regions are drawn in monospace with the course theme. */
+export const COMPONENTS = ["sidebar", "editor", "tabs", "breadcrumbs", "code", "menu", "toolbar", "terminal", "content", "container"] as const;
+export const APPLICATIONS = ["ide", "code-editor", "terminal", "website", "desktop", "other"] as const;
+export type Component = (typeof COMPONENTS)[number];
+export type Application = (typeof APPLICATIONS)[number];
+
+/** Limits that keep a pasted report from swamping the page. */
 const MAX_CHARS = 1_000_000;
 const MAX_REGIONS = 40;
 const MAX_LINES = 5_000;
 const MAX_LINE_CHARS = 2_000;
 const MAX_NODES = 200;
-const GRID = 1000;
+/** Boxes are on this grid over the whole screenshot. */
+export const GRID = 1000;
 
 export interface ReportRegion {
   id: string;
-  type: (typeof COMPONENTS)[number];
+  type: Component;
   parent: string | null;
   /** On the 0–1000 grid; absent = the whole screenshot. */
   box?: Box;
+  /** "#rrggbb", as the AI saw it; contrast is fixed when rendering. */
+  background?: string;
+  color?: string;
   lines: string[];
+  /** Code: the editor's number for the first line, when the screenshot doesn't start at line 1. */
+  first_line?: number;
   /** 1-based numbers of lines the screenshot cuts off at its edge. */
   cut_off_lines?: number[];
   /** Words the AI isn't sure it read right. */
@@ -64,42 +71,33 @@ export interface ScreenshotReport {
   format: typeof REPORT_FORMAT;
   version: typeof REPORT_VERSION;
   kind: Kind;
-  application: (typeof APPLICATIONS)[number];
+  application: Application;
   language?: string;
   regions: ReportRegion[];
   diagram?: Diagram;
   notes?: string;
 }
 
-/** One region's text, placed in image pixels, as the job's vision readings are. */
-export interface ReportReading {
-  box: Box;
-  role: string;
-  text: string;
-}
-
-/** What the rest of the app uses from a report, in image pixels. */
-export interface ReportInputs {
-  report: ScreenshotReport;
-  /** Null when the regions don't form a valid layout (overlaps, a missing parent…); `layoutProblem` says why. */
-  layout: VisionLayout | null;
-  layoutProblem: string | null;
-  readings: ReportReading[];
-  diagram: Diagram | null;
-  /** Fields the format doesn't know: ignored, but worth telling the designer. */
-  warnings: string[];
-}
-
-export type ReportResult = { ok: true; value: ReportInputs } | { ok: false; problems: string[] };
+export type ReportResult =
+  | { ok: true; report: ScreenshotReport; warnings: string[] }
+  | { ok: false; problems: string[] };
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const TOP_KEYS = ["format", "version", "kind", "application", "language", "regions", "diagram", "notes"];
-const REGION_KEYS = ["id", "type", "parent", "box", "lines", "cut_off_lines", "unsure_words"];
+const REGION_KEYS = ["id", "type", "parent", "box", "background", "color", "lines", "first_line", "cut_off_lines", "unsure_words"];
 
 /** Accept the JSON as an AI usually hands it over: possibly inside a ```json fence. */
 function unwrap(text: string): string {
   const fenced = text.match(/```(?:json)?\s*\n([\s\S]*?)\n?```/);
   return (fenced ? fenced[1]! : text).trim();
+}
+
+/** "#abc" or "#aabbcc" → "#aabbcc"; anything else → null. */
+export function hexColor(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(value.trim());
+  if (short) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`.toLowerCase();
+  return /^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim().toLowerCase() : null;
 }
 
 function checkBox(value: unknown, where: string, problems: string[]): Box | undefined {
@@ -141,9 +139,8 @@ function checkDiagram(value: unknown, problems: string[]): Diagram | undefined {
   return value as unknown as Diagram;
 }
 
-/** Check a pasted report against format v1 and convert it to image pixels
- *  (`width` × `height`: the screenshot it describes). */
-export function parseReport(text: string, width: number, height: number): ReportResult {
+/** Check a pasted report against format v1. */
+export function parseReport(text: string): ReportResult {
   if (text.length > MAX_CHARS) return { ok: false, problems: [`The report is ${text.length} characters (at most ${MAX_CHARS}).`] };
   let value: unknown;
   try { value = JSON.parse(unwrap(text)); }
@@ -155,7 +152,7 @@ export function parseReport(text: string, width: number, height: number): Report
   if (value.format !== REPORT_FORMAT) problems.push(`format must be "${REPORT_FORMAT}"`);
   if (value.version !== REPORT_VERSION) problems.push(`version must be ${REPORT_VERSION} (got ${JSON.stringify(value.version)})`);
   if (!KINDS.includes(value.kind as Kind)) problems.push(`kind must be one of ${KINDS.join(", ")}`);
-  if (!APPLICATIONS.includes(value.application as (typeof APPLICATIONS)[number])) problems.push(`application must be one of ${APPLICATIONS.join(", ")}`);
+  if (!APPLICATIONS.includes(value.application as Application)) problems.push(`application must be one of ${APPLICATIONS.join(", ")}`);
   if (value.language !== undefined && (typeof value.language !== "string" || value.language.length > 40)) problems.push("language must be a short name such as \"json\" or \"python\"");
   if (value.notes !== undefined && typeof value.notes !== "string") problems.push("notes must be text");
   for (const key of Object.keys(value)) if (!TOP_KEYS.includes(key)) warnings.push(`Ignored unknown field "${key}".`);
@@ -173,9 +170,16 @@ export function parseReport(text: string, width: number, height: number): Report
       if (typeof r.id !== "string" || !/^[a-zA-Z0-9_-]{1,48}$/.test(r.id)) problems.push(`${where}: id must be 1–48 letters, digits, - or _`);
       else if (ids.has(r.id)) problems.push(`${where}: duplicate id`);
       else ids.add(r.id);
-      if (!COMPONENTS.includes(r.type as ReportRegion["type"])) problems.push(`${where}: type must be one of ${COMPONENTS.join(", ")}`);
+      if (!COMPONENTS.includes(r.type as Component)) problems.push(`${where}: type must be one of ${COMPONENTS.join(", ")}`);
       if (r.parent !== null && r.parent !== undefined && typeof r.parent !== "string") problems.push(`${where}: parent must be another region's id or null`);
       const box = checkBox(r.box, where, problems);
+      const colors: Pick<ReportRegion, "background" | "color"> = {};
+      for (const key of ["background", "color"] as const) {
+        if (r[key] === undefined) continue;
+        const hex = hexColor(r[key]);
+        if (hex) colors[key] = hex;
+        else problems.push(`${where}: ${key} must be a hex color such as "#1e1e1e"`);
+      }
       const lines = r.lines;
       if (!Array.isArray(lines) || !lines.every((l) => typeof l === "string")) { problems.push(`${where}: lines must be a list of text lines`); continue; }
       lineCount += lines.length;
@@ -188,146 +192,36 @@ export function parseReport(text: string, width: number, height: number): Report
       }
       const unsure = r.unsure_words;
       if (unsure !== undefined && (!Array.isArray(unsure) || !unsure.every((w) => typeof w === "string"))) problems.push(`${where}: unsure_words must be a list of words`);
+      const first = r.first_line;
+      if (first !== undefined && (!Number.isInteger(first) || (first as number) < 1)) problems.push(`${where}: first_line must be a whole number from 1`);
       regions.push({
-        id: String(r.id), type: r.type as ReportRegion["type"], parent: typeof r.parent === "string" ? r.parent : null,
-        ...(box ? { box } : {}), lines: lines as string[],
+        id: String(r.id), type: r.type as Component, parent: typeof r.parent === "string" ? r.parent : null,
+        ...(box ? { box } : {}), ...colors, lines: lines as string[],
+        ...(Number.isInteger(first) ? { first_line: first as number } : {}),
         ...(Array.isArray(cut) ? { cut_off_lines: cut as number[] } : {}),
         ...(Array.isArray(unsure) ? { unsure_words: unsure as string[] } : {}),
       });
     }
     if (lineCount > MAX_LINES) problems.push(`${lineCount} lines in all (at most ${MAX_LINES})`);
     for (const r of regions) if (r.parent !== null && !ids.has(r.parent)) problems.push(`regions ("${r.id}"): parent "${r.parent}" isn't a listed region`);
+    for (const r of regions) {
+      const seen = new Set([r.id]);
+      for (let p = r.parent; p !== null; p = regions.find((n) => n.id === p)?.parent ?? null) {
+        if (seen.has(p)) { problems.push(`regions ("${r.id}"): its parents loop back to it`); break; }
+        seen.add(p);
+      }
+    }
   }
 
   let diagram: Diagram | undefined;
   if (value.diagram !== undefined) diagram = checkDiagram(value.diagram, problems);
   if (value.kind === "diagram" && value.diagram === undefined) problems.push("a diagram report needs a diagram with summary, nodes and edges");
   if (problems.length) return { ok: false, problems };
-
-  const report = { ...(value as unknown as ScreenshotReport), regions };
-  const toPixels = (box: Box | undefined): Box => box
-    ? { x: box.x * width / GRID, y: box.y * height / GRID, width: box.width * width / GRID, height: box.height * height / GRID }
-    : { x: 0, y: 0, width, height };
-  // The existing layout checks apply: a broken tree costs the layout, not the text.
-  const checked = checkLayout({
-    application: report.application,
-    components: regions.map((r) => ({ id: r.id, type: r.type, parent: r.parent, box: toPixels(r.box) })),
-  }, width, height);
-  const readings = regions.filter((r) => r.lines.some((l) => l.trim())).map((r) => ({ box: toPixels(r.box), role: r.type, text: r.lines.join("\n") }));
-  return { ok: true, value: { report, layout: checked.layout, layoutProblem: checked.problem, readings, diagram: diagram ?? null, warnings } };
-}
-
-/** OCR confidence (0–100) under which a short word the report never mentions counts as noise. */
-const NOISE_CONFIDENCE = 60;
-/** Longest "word" that can be dropped as noise: window buttons and icons read as "Oo", "@", "fA". */
-const NOISE_CHARS = 3;
-
-export interface ReportChange { box: Box; from: string; to: string }
-
-const sameBox = (a: Box, b: Box) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
-
-/** Step 1 of trusting a report: drop OCR noise it doesn't contain. A short
- *  OCR "word" (window buttons and icons read as "Oo", "@", "fA") that is
- *  unsure or has no letters, and that the report has nowhere, is removed.
- *  Done before comparing words, so noise doesn't stop lines lining up. */
-export function dropReportNoise(
-  words: readonly OcrWord[],
-  readings: readonly ReportReading[],
-  /** Words the reviewer typed: never dropped. */
-  locked: readonly Box[] = [],
-): { words: OcrWord[]; dropped: { box: Box; text: string }[] } {
-  const tokens = new Set(readings.flatMap((r) => r.text.split(/\s+/)).filter(Boolean));
-  // In code and terminals every character counts: a "t" may be a misread "{"
-  // that the code clean-up repairs, so nothing there is dropped.
-  const exact = readings.filter((r) => r.role === "code" || r.role === "terminal").map((r) => r.box);
-  const inside = (w: OcrWord, b: Box) => w.x + w.width / 2 >= b.x && w.x + w.width / 2 <= b.x + b.width && w.y + w.height / 2 >= b.y && w.y + w.height / 2 <= b.y + b.height;
-  const kept: OcrWord[] = [];
-  const dropped: { box: Box; text: string }[] = [];
-  for (const word of words) {
-    // Numbers stay too: a code editor's line numbers are left out of the
-    // report's text, but the code clean-up needs them to find each line.
-    const noise = !locked.some((box) => sameBox(box, word)) && !exact.some((box) => inside(word, box))
-      && !tokens.has(word.text) && [...word.text].length <= NOISE_CHARS
-      && !/^\d+$/.test(word.text) && (word.confidence < NOISE_CONFIDENCE || !/[\p{L}\p{N}]/u.test(word.text));
-    if (noise) dropped.push({ box: { x: word.x, y: word.y, width: word.width, height: word.height }, text: word.text });
-    else kept.push(word);
-  }
-  return { words: kept, dropped };
-}
-
-/** Character edits between two words, over their length: 0 = same, 1 = nothing in common. */
-function difference(a: string, b: string): number {
-  const x = [...a], y = [...b];
-  let previous = Array.from({ length: y.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= x.length; i++) {
-    const current = [i];
-    for (let j = 1; j <= y.length; j++) current.push(Math.min(previous[j - 1]! + (x[i - 1] === y[j - 1] ? 0 : 1), previous[j]! + 1, current[j - 1]! + 1));
-    previous = current;
-  }
-  return previous[y.length]! / Math.max(1, x.length, y.length);
-}
-
-/** Most of a word that may differ for the report's reading to replace OCR's. */
-const SAME_WORD = 0.4;
-
-/** True when two readings are plausibly the same word misread ("HIML" →
- *  "HTML", "packagejson" → "package.json", curly → straight quotes), not
- *  two different words that line alignment happened to pair up ("Debug" →
- *  "{" where the report rightly left an editor hint out). */
-export function sameWord(ocr: string, report: string): boolean {
-  return onlyLookalikes(ocr, report) || difference(ocr, report) <= SAME_WORD;
-}
-
-/** Step 2: where the report and OCR read the same word differently, use the
- *  report's word. `model` is a conversion of `words` whose spans already
- *  carry the report's readings (addVision). OCR keeps where each word sits
- *  and its colors; its own reading stays available to the reviewer
- *  (flagReportChanges). A disagreement that isn't the same word stays a
- *  suggestion on the checklist. Words the report has but OCR missed can't be
- *  placed, so they aren't added. */
-export function applyReportReadings(
-  words: readonly OcrWord[],
-  model: ScreenshotModel,
-  /** Words the reviewer typed: never changed. */
-  locked: readonly Box[] = [],
-): { words: OcrWord[]; changed: ReportChange[] } {
-  const changes: ReportChange[] = model.regions.flatMap((r) => r.lines.flatMap((l) => l.spans)).flatMap((span) => {
-    const to = span.alternatives.find((a) => a.source === "vision")?.text;
-    return to && to !== span.text && sameWord(span.text, to) ? [{ box: span.box, from: span.text, to }] : [];
-  });
-  const changed: ReportChange[] = [];
-  const result = words.map((word) => {
-    const change = !locked.some((box) => sameBox(box, word)) && changes.find((c) => sameBox(c.box, word));
-    if (!change) return word;
-    changed.push(change);
-    // Per-letter boxes belong to the old text; colors fall back to the word's box.
-    const { symbols: _old, ...rest } = word;
-    return { ...rest, text: change.to, confidence: 100 };
-  });
-  return { words: result, changed };
-}
-
-/** Put every word the report changed on the review checklist, with OCR's
- *  reading as the alternative, so the reviewer can see and undo each change. */
-export function flagReportChanges(model: ScreenshotModel, changed: readonly ReportChange[]): ScreenshotModel {
-  return {
-    ...model,
-    regions: model.regions.map((region) => {
-      const flags = [...region.flags];
-      const lines = region.lines.map((line) => ({ ...line, spans: line.spans.map((span) => {
-        const change = changed.find((c) => sameBox(c.box, span.box));
-        if (!change) return span;
-        flags.push({ reason: "sources-disagree", spanId: span.id, detail: `The AI report read "${change.to}"; the app's OCR read "${change.from}"` });
-        return { ...span, alternatives: [...span.alternatives.filter((a) => a.text !== change.from), { source: "ocr" as const, text: change.from, confidence: null }] };
-      }) }));
-      return flags.length === region.flags.length ? region : { ...region, lines, flags, review: "pending" as const };
-    }),
-  };
+  return { ok: true, report: { ...(value as unknown as ScreenshotReport), regions, ...(diagram ? { diagram } : {}) }, warnings };
 }
 
 /** All of a report's text, in the order the report lists its regions (the
- *  AI's reading order): what it says the screenshot reads, for scoring
- *  against a known transcript. */
+ *  AI's reading order): for the transcript and for scoring. */
 export function reportText(report: ScreenshotReport): string {
   return report.regions.flatMap((r) => r.lines).join("\n");
 }

@@ -1,52 +1,24 @@
 # Test set
 
-Real course screenshots, used to measure each converter change.
+Real course screenshots with their AI reports and correct text, to measure how
+well the AI instructions (or the ChatGPT plugin) read screenshots. Everything
+here except this README stays on your computer: screenshots can show names,
+hosts or tokens.
 
 ```text
 fixtures/
-  terminal/   ls-output.png   ls-output.txt   (ls-output.json)
-  code/       ...
-  diagram/    ...
-  interface/  ...
-  baseline.json   saved scores to compare against
+  batch-5/   pi-dialog.png          the screenshot (kept for reference; not read)
+             pi-dialog.report.json  the AI's report, saved as it replied
+             pi-dialog.txt          the exact correct text: same lines, same indentation
 ```
-
-- **Folder** = screenshot type. Names `ide` and `ui` also work (as `code` and `interface`).
-- **`<name>.txt`** (optional) = the exact correct text: same lines, same
-  indentation. Without it, the screenshot still gets a Canvas check but no text score.
-- **`<name>.json`** (optional) = `{ "kind": "code", "label": "..." }` to override the folder.
-- **`<name>.layout.json`** (optional) = hand-marked component boxes in image
-  pixels, `{ "components": [{ "type": "sidebar", "box": { "x", "y", "width", "height" } }, …] }`
-  (types as in `src/core/vision-layout.ts`). Scored as the overlap of each
-  marked box with the detected component of the same type.
-- **`<name>.vision.json`** (written by eval) = the vision model's saved
-  answers for this screenshot, replayed so runs repeat exactly. Delete it,
-  or run with `--refresh-vision`, to ask the model again.
-
-Each screenshot runs through the same job as the app (OCR, layout, vision
-readings, lookalike corrections, rendering). Besides the text score, eval
-reports the renderer used, the layout overlap, and **made-up words**: visible
-words in the HTML that no OCR word or recorded correction supports. For a
-layout, the text score uses the component whose text best matches the
-`.txt`, since the `.txt` may cover only the code.
 
 ```bash
-npm run eval                    # score everything, compare with baseline.json
-npm run eval -- --save-baseline # make the current scores the new baseline
-npm run eval -- --only ls       # just files whose name contains "ls"
-npm run eval -- --refresh-vision # ask the vision model again instead of replaying
-npm run eval -- --allow-empty   # no screenshots (fresh checkout, CI): report SKIPPED, not fail
+npm run eval                  # score every report that has a .txt next to it
+npm run eval -- --only pi     # just files whose name contains "pi"
+npm run eval -- --allow-empty # no reports (fresh checkout, CI): report SKIPPED, not fail
 ```
 
-The text score that gates regressions ignores spacing: how many spaces,
-indentation and blank lines. Renderers keep text where the screenshot shows it,
-so the `.txt` can be written compactly. Exact CER and exact lines are shown too.
-Means are reported per type. A screenshot whose bytes repeat an earlier one
-is skipped, so copies don't count twice.
-
-Results go to `eval-results/` (not committed): `latest.json` plus one
-comparison page per screenshot in `eval-results/preview/`.
-
-Screenshots and their `.txt`/`.json` are **not committed** by default, as
-they may show names, hosts or tokens. Remove the rules in `.gitignore` here
-to commit them.
+Each report is scored by its whole text, or by the region that best matches
+the `.txt` (which may cover only the code): character errors and lines read
+right, both ignoring how many spaces there are. Reports that fail the format
+check are listed with their problems.

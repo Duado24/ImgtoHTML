@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { addDiagram, convert, issuesFor } from "../src/core/convert";
 import { checkCanvasSafe } from "../src/core/canvas";
-import { renderDiagram, unconfirmedLabels, type Diagram } from "../src/core/diagram";
-import { FakeImage } from "./image";
+import { renderDiagram, type Diagram } from "../src/core/diagram";
 
 const flowchart: Diagram = {
   summary: "How a program checks a button press.",
@@ -45,21 +43,3 @@ describe("renderDiagram", () => {
   });
 });
 
-describe("unconfirmedLabels", () => {
-  it("lists labels with words OCR never saw", () => {
-    expect(unconfirmedLabels(flowchart, "Start Button pressed? Turn on LEO")).toEqual(["Turn on LED"]);
-  });
-});
-
-describe("addDiagram", () => {
-  it("replaces the OCR text box and tells the reviewer what to check", () => {
-    const pixels = new FakeImage(100, 40, [255, 255, 255]);
-    const base = convert({ fileName: "f.png", pixels, words: [], animated: false, kind: "diagram", label: "Button flowchart" });
-    expect(issuesFor(base).some((i) => i.text.includes("needs the vision model"))).toBe(true);
-    const result = addDiagram(base, flowchart);
-    expect(result.html).toContain('aria-label="Button flowchart"');
-    expect(result.htmlFile.content).toBe(result.html);
-    expect(result.review.diagram).toEqual({ parts: 3, connections: 3, unconfirmed_labels: ["Start", "Button pressed?", "Turn on LED"] });
-    expect(issuesFor(result).map((i) => i.level)).toEqual(expect.arrayContaining(["info", "warn"]));
-  });
-});

@@ -1,205 +1,93 @@
 import { describe, expect, it } from "vitest";
-import { applyDecisions, convert, issuesFor, previewPage, splitName } from "../src/core/convert";
-import { checkCanvasSafe } from "../src/core/canvas";
-import { KINDS } from "../src/core/types";
-import type { OcrWord, RGB } from "../src/core/types";
-import { FakeImage } from "./image";
+import { convert } from "../src/core/convert";
+import { parseReport, type ScreenshotReport } from "../src/core/report";
 
-const DARK: RGB = [0x1e, 0x1e, 0x1e];
-const TEXT: RGB = [0xd4, 0xd4, 0xd4];
+const read = (value: object): ScreenshotReport => {
+  const parsed = parseReport(JSON.stringify({ format: "imgtohtml-report", version: 1, ...value }));
+  if (!parsed.ok) throw new Error(parsed.problems.join("\n"));
+  return parsed.report;
+};
 
-const word = (text: string, x: number, y: number, width: number, confidence = 96, line = 0): OcrWord => ({
-  text, confidence, block: 0, paragraph: 0, line, x, y, width, height: 14,
+const vscode = read({
+  kind: "code", application: "ide", language: "json",
+  regions: [
+    { id: "files", type: "sidebar", parent: null, box: { x: 0, y: 0, width: 250, height: 1000 }, lines: ["EXPLORER", "⌄ web", "  package.json"] },
+    { id: "tabs", type: "tabs", parent: null, box: { x: 250, y: 0, width: 750, height: 60 }, lines: ["Preview README.md", "package.json"] },
+    { id: "crumbs", type: "breadcrumbs", parent: null, box: { x: 250, y: 60, width: 750, height: 50 }, lines: ["web > package.json > ..."] },
+    { id: "code", type: "code", parent: null, box: { x: 250, y: 110, width: 750, height: 890 },
+      lines: ["{", '  "name": "web",', '  "description": "Local screenshot to Canvas HTML app, with a TypeScript client and Nod', "}"],
+      cut_off_lines: [3], unsure_words: ["Nod"] },
+  ],
 });
 
-/** A fake terminal: two "words" drawn as solid blocks, with OCR boxes on them. */
-function terminal() {
-  const pixels = new FakeImage(300, 80, DARK);
-  pixels.fill(10, 10, 89, 23, TEXT);
-  pixels.fill(100, 10, 149, 23, TEXT);
-  const words = [word("/home/duado24/app", 10, 10, 80), word("ok", 100, 10, 50, 52)];
-  return { pixels, words };
-}
-
-/** A fake editor: sidebar | separator line | editor with yellow and gray text. */
-function editor() {
-  const pixels = new FakeImage(400, 120, [0x18, 0x18, 0x18]);
-  pixels.fill(120, 0, 120, 119, [0x2b, 0x2b, 0x2b]); // vertical separator
-  pixels.fill(10, 10, 89, 23, [0xcc, 0xcc, 0xcc]); // "Explorer"
-  pixels.fill(140, 10, 179, 23, [0xdc, 0xdc, 0xaa]); // "print"
-  pixels.fill(182, 10, 189, 23, [0xcc, 0xcc, 0xcc]); // "("
-  const words: OcrWord[] = [
-    word("Explorer", 10, 10, 80),
-    {
-      ...word("print(", 140, 10, 50),
-      symbols: [
-        ...[..."print"].map((c, i) => ({ text: c, x: 140 + 8 * i, y: 10, width: 8, height: 14 })),
-        { text: "(", x: 182, y: 10, width: 8, height: 14 },
-      ],
-    },
-  ];
-  return { pixels, words };
-}
+const noTables = (html: string) => expect(html).not.toMatch(/<(?:table|thead|tbody|tr|td|th|pre|style|script)\b/i);
 
 describe("convert", () => {
-  it("builds the Canvas HTML, transcript and review", () => {
-    const { pixels, words } = terminal();
-    const result = convert({
-      fileName: "Screenshot 2026-10-23 124247.PNG",
-      pixels, words, animated: false, kind: "terminal", label: "Terminal output",
-    });
-
-    expect(result.htmlFile.name).toBe("Media_Screenshot_2026-10-23_124247.png.html");
-    expect(result.transcriptFile.name).toBe("Screenshot_2026-10-23_124247_transcript.txt");
-    expect(result.reviewFile.name).toBe("Screenshot_2026-10-23_124247_review.json");
-    expect(result.transcript).toContain("/home/username/app");
-    expect(result.html).toContain("/home/username/app");
-    expect(result.html).toContain('aria-label="Terminal output"');
-    expect(result.lowConfidenceCount).toBe(1);
-    expect(JSON.parse(result.reviewFile.content)).toEqual(result.review);
+  it("draws a VS Code report as the editor window, code colored and the cut-off line marked", () => {
+    const result = convert(vscode);
+    expect(result.renderer).toBe("editor-window");
+    expect(result.label).toBe("JSON code: EXPLORER");
+    expect(result.html).toContain("<em>package.json</em>&nbsp;&nbsp;×"); // the tab the breadcrumb names is open
+    expect(result.html).toContain("and Nod…");
+    expect(result.html).toContain('<span style="color:#9cdcfe;">&quot;name&quot;</span>');
+    expect(result.transcript).toBe('EXPLORER\n⌄ web\n  package.json\nPreview README.md\npackage.json\nweb > package.json > ...\n{\n  "name": "web",\n  "description": "Local screenshot to Canvas HTML app, with a TypeScript client and Nod…\n}');
+    expect(result.canvasIssues).toEqual([]);
+    noTables(result.html);
   });
 
-  it.each(KINDS)("renders %s screenshots without table markup", (kind) => {
-    const { pixels, words } = editor();
-    for (const transcript of [undefined, "A very long line: " + "word".repeat(100)]) {
-      const result = convert({ fileName: "a.png", pixels, words, animated: false, kind, transcript });
-      expect(result.html).not.toMatch(/<(?:table|thead|tbody|tfoot|tr|th|td)\b/i);
-      expect(checkCanvasSafe(result.html)).toEqual([]);
-      expect(result.html).not.toContain("white-space:pre;");
-    }
+  it("lists what to check: unsure words and cut-off lines", () => {
+    expect(convert(vscode).checks).toEqual([{
+      region: "code", title: "Code",
+      lines: ["{", '  "name": "web",', '  "description": "Local screenshot to Canvas HTML app, with a TypeScript client and Nod…', "}"],
+      unsure: ["Nod"], cutOff: [3],
+    }]);
   });
 
-  it("renders an empty code screenshot without inventing text", () => {
-    const result = convert({ fileName: "empty.png", pixels: new FakeImage(400, 100, DARK), words: [], animated: false, kind: "code" });
-    expect(result.transcript).toBe("");
-    expect(result.review.cut_off_lines).toBeUndefined();
-    expect(result.lowConfidenceCount).toBe(0);
+  it("draws plain code without the window when asked, numbered nowhere", () => {
+    const result = convert(vscode, { editorWindow: false, label: "My label", caption: "From lesson 2" });
+    expect(result.renderer).toBe("code");
+    expect(result.html).toContain('aria-label="My label"');
+    expect(result.html).toContain("From lesson 2</p>");
+    expect(result.html).not.toContain("EXPLORER");
+    expect(result.htmlFile.name).toBe("Media_My_label.html");
   });
 
-  it("counts doubtful words in unchecked regions and reaches zero when reviewed", () => {
-    const { pixels, words } = terminal();
-    const result = convert({ fileName: "a.png", pixels, words, animated: false, kind: "terminal" });
-    expect(result.lowConfidenceCount).toBe(1);
-    for (const state of ["approved", "corrected", "skipped"] as const) {
-      const checked = applyDecisions(result, new Map([["r1", state]]));
-      expect(checked.lowConfidenceCount).toBe(0);
-      expect(checked.review.regions_to_review).toEqual([]);
-    }
-    const pending = applyDecisions(applyDecisions(result, new Map([["r1", "approved"]])), new Map([["r1", "pending"]]));
-    expect(pending.lowConfidenceCount).toBe(1);
+  it("draws a terminal with the course theme, prompts green and errors red", () => {
+    const result = convert(read({ kind: "terminal", application: "terminal", regions: [
+      { id: "t", type: "terminal", parent: null, lines: ["user@host:~$ cat notes.txt", "cat: notes.txt: No such file or directory"] },
+    ] }));
+    expect(result.renderer).toBe("terminal");
+    expect(result.html).toContain('<span style="color:#23d18b;">user@host:~$ </span>');
+    expect(result.html).toContain('style="white-space:pre-wrap;overflow-wrap:anywhere;padding-left:2ch;text-indent:-2ch;"><span style="color:#f25858;">cat: notes.txt');
+    expect(result.html).toContain("background-color:#1e1e1e;");
+    noTables(result.html);
   });
 
-  it("marks code cut off at the screenshot edge without inventing its ending", () => {
-    const pixels = new FakeImage(400, 140, DARK);
-    const words = [
-      word("1", 8, 10, 8, 99, 1), word("{", 46, 10, 8, 99, 1),
-      word("2", 8, 30, 8, 99, 2), word('"description":', 46, 30, 104, 99, 2), word('"TypeScript client and Nod', 158, 30, 240, 99, 2),
-      word("3", 8, 50, 8, 99, 3), word('"type":', 46, 50, 56, 99, 3), word('"module",', 110, 50, 72, 99, 3),
-      word("4", 8, 70, 8, 99, 4), word("}", 46, 70, 8, 99, 4),
-    ];
-    const result = convert({ fileName: "cutoff.png", pixels, words, animated: false, kind: "code" });
-    expect(result.html).toContain("TypeScript client and Nod…");
-    expect(result.transcript).toContain("TypeScript client and Nod…");
-    expect(result.html).not.toContain("Node");
-    expect(result.review.cut_off_lines).toEqual([expect.objectContaining({ line: 2, text: expect.stringContaining("Nod") })]);
-    expect(result.model.regions.flatMap((r) => r.flags)).toContainEqual(expect.objectContaining({ reason: "cut-off", detail: "This line was cut off in the screenshot." }));
+  it("masks user names in home folders, everywhere they appear", () => {
+    const result = convert(read({ kind: "terminal", application: "terminal", regions: [
+      { id: "t", type: "terminal", parent: null, lines: ["PS C:\\Users\\alice\\CS104> whoami", "alice@ensign.edu"], unsure_words: ["alice"] },
+    ] }));
+    expect(result.transcript).toBe("PS C:\\Users\\username\\CS104> whoami\nusername@ensign.edu");
+    expect(result.html).not.toContain("alice");
+    expect(result.maskedNames).toBe(1);
   });
 
-  it("still finds cut-off code when OCR misreads a gutter number and includes a hint", () => {
-    const pixels = new FakeImage(400, 180, DARK);
-    const raw = ["1    {", '2      "name": "web",', 'Bf     "description": "Nod', '4      "type": "module",', "Debug", '5      "private": true', "6    }"];
-    const words = raw.map((text, i) => word(text, 8, 10 + i * 20, i === 2 ? 390 : text.length * 8, 99, i));
-    const result = convert({ fileName: "cutoff.png", pixels, words, animated: false, kind: "code" });
-    expect(result.review.code?.line_numbers_removed).toBe(true);
-    expect(result.transcript).toContain('"description": "Nod…');
-    expect(result.review.cut_off_lines).toEqual([expect.objectContaining({ line: 3 })]);
+  it("describes a diagram in words, with its parts and connections", () => {
+    const result = convert(read({ kind: "diagram", application: "other",
+      regions: [{ id: "d", type: "content", parent: null, lines: ["Start", "Check"] }],
+      diagram: { summary: "A two-step flow.", nodes: [{ id: "a", label: "Start", shape: "start" }, { id: "b", label: "Check", shape: "decision" }], edges: [{ from: "a", to: "b", label: "" }] } }));
+    expect(result.renderer).toBe("diagram");
+    expect(result.label).toBe("Diagram: A two-step flow.");
+    expect(result.html).toContain("Start → Check");
+    expect(result.transcript.startsWith("A two-step flow.")).toBe(true);
   });
 
-  it("keeps the screenshot's own background and text colors outside the course theme", () => {
-    const { pixels, words } = terminal();
-    const { review, html } = convert({ fileName: "a.png", pixels, words, animated: false, kind: "diagram" });
-    expect(review.original_colors.background).toBe("#1e1e1e");
-    expect(html).toContain("background-color:#1e1e1e");
-    expect(html).toContain("color:#d4d4d4");
-  });
-
-  it("pale text on white is darkened to 4.5:1", () => {
-    const pixels = new FakeImage(200, 40, [0xff, 0xff, 0xff]);
-    pixels.fill(10, 10, 99, 23, [0x99, 0x99, 0x99]);
-    const { review } = convert({
-      fileName: "a.png", pixels, words: [word("hello", 10, 10, 90)], animated: false, kind: "diagram",
-    });
-    expect(review.contrast_ratio).toBeGreaterThanOrEqual(4.5);
-    expect(review.contrast_changes).toHaveLength(1);
-  });
-
-  it("letters keep their own colors (syntax highlighting) outside the course theme", () => {
-    const { pixels, words } = editor();
-    const { html, review } = convert({ fileName: "a.png", pixels, words, animated: false, kind: "diagram" });
-    expect(html).toContain('<span style="color:#dcdcaa;">print</span>(');
-    expect(review.colors_used).toEqual(expect.arrayContaining(["#cccccc", "#dcdcaa"]));
-  });
-
-  it("code uses the course theme and is highlighted by language", () => {
-    const { pixels, words } = editor();
-    const transcript = "def greet(name):\n    # say hello\n    return f\"Hello {name}\"\n\nprint(greet('class'))";
-    const { html, review } = convert({ fileName: "a.png", pixels, words, animated: false, kind: "code", transcript });
-    expect(review.theme).toBe("vscode-dark-code");
-    expect(review.code?.language).toBe("python");
-    expect(html).toContain("background-color:#1e1e1e;color:#d4d4d4;");
-    expect(html).toContain('<span style="color:#569cd6;">def</span>');
-    expect(html).toContain('<span style="color:#dcdcaa;">greet</span>');
-    expect(html).toContain('<span style="color:#6a9955;"># say hello</span>');
-    expect(review.contrast_changes).toEqual([]);
-    expect(review.check_colors_by_hand).toBe(false);
-  });
-
-  it("UI type rebuilds panels split by separator lines", () => {
-    const { pixels, words } = editor();
-    const result = convert({ fileName: "a.png", pixels, words, animated: false, kind: "interface" });
-    expect(result.review.panels).toBe(2);
-    expect(result.html).toContain("display:flex;flex-wrap:wrap;");
-    expect(result.html).toContain("border-right:1px solid #2b2b2b;");
-    expect(result.html).toContain("Explorer");
-  });
-
-  it("other types point out that panels were found", () => {
-    const { pixels, words } = editor();
-    const result = convert({ fileName: "a.png", pixels, words, animated: false, kind: "terminal" });
-    expect(issuesFor(result).map((i) => i.text).join(" ")).toContain("Choose type UI");
-  });
-
-  it("a corrected transcript replaces the OCR text (one color)", () => {
-    const { pixels, words } = terminal();
-    const result = convert({
-      fileName: "a.png", pixels, words, animated: false, kind: "code",
-      transcript: "line one\r\nC:\\Users\\mirca\\x",
-    });
-    expect(result.transcript).toBe("line one\nC:\\Users\\username\\x");
-    expect(result.lowConfidenceCount).toBe(0);
-    expect(result.fromTranscript).toBe(true);
-  });
-
-  it("blank label and caption mean 'not given'; GIFs get the animation note", () => {
-    const { pixels, words } = terminal();
-    const result = convert({
-      fileName: "demo.gif", pixels, words, animated: true, kind: "terminal", label: "  ", caption: "",
-    });
-    expect(result.html).toContain('aria-label="Terminal screenshot showing the content of demo"');
-    expect(result.html).toContain("This reconstruction shows the final frame.");
-  });
-
-  it("comparison page embeds the screenshot and the draft", () => {
-    const { pixels, words } = terminal();
-    const result = convert({ fileName: "a.png", pixels, words, animated: false, kind: "terminal" });
-    const page = previewPage(result, "data:image/png;base64,AAAA");
-    expect(page.name).toBe("a_preview.html");
-    expect(page.content).toContain('src="data:image/png;base64,AAAA"');
-    expect(page.content).toContain(result.html);
-  });
-
-  it("file names split like pathlib", () => {
-    expect(splitName("C:\\shots\\x.y.GIF")).toEqual({ stem: "x.y", suffix: ".gif" });
-    expect(splitName(".bashrc")).toEqual({ stem: ".bashrc", suffix: "" });
+  it("draws an app screenshot as panels, and passes the AI's notes on", () => {
+    const result = convert(read({ kind: "interface", application: "desktop", notes: "Password dots left out.",
+      regions: [{ id: "dialog", type: "content", parent: null, lines: ["Enter your password to allow this.", "Cancel  OK"] }] }));
+    expect(result.renderer).toBe("panels");
+    expect(result.notes).toBe("Password dots left out.");
+    expect(result.html).toContain("Enter your password to allow this.");
+    noTables(result.html);
   });
 });

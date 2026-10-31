@@ -1,129 +1,50 @@
-# ImgtoHTML — local screenshot to Canvas HTML
+# ImgtoHTML — screenshot report to Canvas HTML
 
-The main application is TypeScript in [web/](web/README.md). A small Node
-server performs image decoding and OCR on this computer; the existing browser
-UI displays the draft and offers downloads. The server binds only to
-**127.0.0.1**. Conversion uses no external services, network models or CDNs.
+ImgtoHTML turns screenshots from IT courses (terminals, code, app windows,
+diagrams) into accessible, responsive HTML for Canvas pages.
 
-Compare the original screenshot with the draft before publishing it in Canvas.
-OCR text, reconstructed layout and identity masking still require review.
+An AI chat (ChatGPT or Claude) reads the screenshot and writes a **report**:
+the exact text, the window's parts and its colors. ImgtoHTML turns the report
+into Canvas HTML, entirely in the browser:
 
-## Install
+- no tables, inline styles only, nothing Canvas strips;
+- code and long lines wrap on phones instead of being cut off;
+- terminals and code in the course's VS Code Dark+ theme, with syntax colors;
+- every text color at 4.5:1 contrast or better;
+- a labelled figure for screen readers, window decorations hidden from them.
 
-Install **Node 20.19+ or 22.12+** (including newer even-numbered releases) and npm.
-Install **Tesseract OCR with English language data**, and put tesseract on PATH.
-For Ubuntu / WSL:
+The page uploads nothing: it has no server, and its security policy forbids
+it from sending data anywhere. Screenshots go only to the AI chat you choose,
+so crop or blur names, emails and passwords before sending one.
 
-    sudo apt-get update
-    sudo apt-get install tesseract-ocr tesseract-ocr-eng
-    node --version
-    tesseract --version
-    tesseract --list-langs
+## Use it
 
-On macOS, `brew install tesseract` supplies the CLI. On Windows, install a
-Tesseract distribution and add its installation directory to PATH, or use WSL.
-If the executable is absent, the app automatically uses Tesseract.js **on the
-server**, with the English data installed by npm. Python is not required.
+1. **Get a report.** Press **Copy AI instructions** and paste them into
+   ChatGPT or Claude once. Then send the chat your screenshot. It replies with
+   the report.
+2. **Paste the report** into ImgtoHTML. Problems with it are listed right away,
+   ready to send back to the AI.
+3. **Check** what the AI marked as unsure or cut off, against your screenshot.
+4. **Copy the HTML** and paste it into Canvas with the `</>` HTML editor.
+
+Diagrams become a written description: upload the screenshot to Canvas too
+and put the description with it.
+
+## Host it
+
+The `Publish to GitHub Pages` workflow builds the page and publishes it at
+`https://<owner>.github.io/<repository>/` on every push to `main`, after the
+tests pass. Turn it on once in the repository's **Settings → Pages → Source:
+GitHub Actions**. To put the tool inside Canvas, embed that address in a
+Canvas page with an iframe.
+
+## Develop
 
     cd web
     npm ci
+    npm run dev        # http://127.0.0.1:5173
+    npm test           # unit tests and a browser test of the page
+    npm run build      # the static site, in web/dist
 
-Dependency installation needs network access. After installation, both OCR
-engines and the application operate locally, including the first conversion.
-
-## Run
-
-**One step:** double-click `ImgtoHTML.bat` in Windows Explorer, or in WSL run
-
-    bash web/start.sh        # or: cd web && npm run app
-
-It starts the vision model server (Ollama, from `~/.local/ollama` or PATH) if
-it isn't running, rebuilds the app when the code changed, starts it at
-http://localhost:3000 and opens the browser. Ctrl+C (or closing the window)
-stops what it started. Without Ollama or the model it runs OCR only and says
-so. `NO_BROWSER=1` skips the browser; `IMGTOHTML_VISION=off` skips the model.
-
-The vision model is downloaded once (about 6 GB):
-
-    ~/.local/ollama/bin/ollama pull qwen3-vl:8b-instruct-q4_K_M
-
-For development, start the server and Vite together:
-
-    cd web
-    npm run dev
-
-Open **http://127.0.0.1:5173**. Vite forwards /api requests to the local Node
-server on port 3000. Both listeners bind to 127.0.0.1.
-
-For normal use, build once and serve the client and API together:
-
-    cd web
-    npm run build
-    npm start
-
-Open **http://127.0.0.1:3000**. Stop with Ctrl+C. Do not run dev and start
-at the same time: they use the same API port.
-
-Upload PNG, JPEG, GIF, WebP, BMP or TIFF, up to **25 MB**. GIFs use the final
-composited frame. Blank label/caption fields use the converter's defaults.
-Edit the transcript and re-convert when needed; OCR still runs to measure
-colors. Review notes show the selected renderer and any layout fallback reason.
-
-## Output
-
-The UI offers five downloads, preserving the source extension in the HTML name:
-
-    Media_example.gif.html
-    example_transcript.txt
-    example_review.json
-    example_model.json
-    example_preview.html
-
-Only Media_*.html is the Canvas fragment: inline styles and no style/script/pre
-elements. Its structure depends on the selected renderer. Model JSON records
-the structured screenshot model and region review states. The comparison page embeds the original
-image beside the reconstruction and uses its own local style block. Original
-image pixels are not privacy-masked; the transcript, reconstructed text and
-review words use the existing home-path and learned-email masking rules.
-
-Jobs/results are held in memory, with bounded queuing and retention. Download
-outputs you want to keep; restarting the server clears jobs. Files are not
-automatically written to the legacy out/ directory.
-
-## Test
-
-    cd web
-    npm test           # Vitest, including Fastify injection tests with mocked OCR
-    npm run build      # client/server type checks and production builds
-    npm run test:ocr   # optional real CLI + local Tesseract.js smoke test
-
-The optional OCR test requires native Tesseract and English data. The regular
-suite does not require the CLI. See [web/README.md](web/README.md) for the API,
-architecture and parity coverage.
-
-## Repository layout
-
-    web/src/core/       Pure, browser-free conversion logic
-    web/src/browser/    Client API calls
-    web/src/main.ts     Browser UI
-    web/server/         Fastify, image decoding, job queue and OCR adapters
-    web/tests/          Core, image, OCR-interface, client and server tests
-    imgtohtml/          Python v1.2.6 reference implementation (preserved)
-    tests/             Python reference tests
-    docs/              Historical Python documentation
-
-The existing Ollama vision model also detects application layout before rendering.
-OCR remains the text source; vision readings provide review alternatives. See
-[web/README.md](web/README.md#vision-layout-reconstruction) for browser validation
-and the VS Code regression workflow.
-
-## Python reference
-
-The Python implementation remains available for comparison; it is not the
-main app. Its CLI, Flask UI (:5000), and Tkinter UI are unchanged:
-
-    python -m pip install -r requirements.txt
-    python -m imgtohtml.screenshot_to_canvas example.gif --type terminal
-    python -m imgtohtml.web
-    python -m imgtohtml.ui
-    python -m unittest discover -v
+See [web/README.md](web/README.md) for the report format and how the code fits
+together.

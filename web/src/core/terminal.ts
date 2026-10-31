@@ -1,7 +1,6 @@
 /** Terminal screenshots: which lines are commands (after a prompt), which
- *  are output, which are errors, and which OCR readings of a command are
- *  probably lookalike mistakes. Suggestions are never applied on their
- *  own; they go to review. */
+ *  are output and which are errors, so prompts and errors get the theme's
+ *  colors. */
 
 import { sameColor } from "./colors";
 import { lineText, type PaintedLine, type Run } from "./paint";
@@ -34,49 +33,6 @@ export function classifyLine(text: string): TerminalLine {
     if (match && !/^[\s|_█▌▏]*$/.test(text.slice(match[0].length))) return { role: "command", prompt: match[0] };
   }
   return { role: ERROR.test(text) ? "error" : "output", prompt: "" };
-}
-
-export interface Suggestion {
-  /** As OCR read it. */
-  from: string;
-  to: string;
-  why: string;
-}
-
-/** Commands that course screenshots run; used to spot "1s" for "ls". */
-const COMMANDS = new Set([
-  "ls", "ll", "cd", "pwd", "cat", "less", "head", "tail", "mkdir", "rmdir", "rm", "cp", "mv", "touch", "chmod",
-  "chown", "ln", "find", "grep", "echo", "clear", "exit", "nano", "vim", "sudo", "apt", "apt-get", "pip", "pip3",
-  "python", "python3", "node", "npm", "npx", "git", "ssh", "scp", "ping", "curl", "wget", "man", "which", "whoami",
-  "history", "ps", "kill", "top", "htop", "df", "du", "tar", "unzip", "zip", "neofetch", "ifconfig", "ip",
-  "systemctl", "reboot", "shutdown", "dir", "cls", "type", "del", "copy", "move", "code", "docker", "java", "javac",
-  "gcc", "make", "dotnet",
-]);
-
-/** Likely OCR mistakes in one word of a command. `first`: the command name itself. */
-export function suggestFix(word: string, first: boolean): Suggestion | null {
-  if (first && !COMMANDS.has(word) && /[1I|]/.test(word)) {
-    const fixed = word.replace(/[1I|]/g, "l");
-    if (COMMANDS.has(fixed)) return { from: word, to: fixed, why: `"${fixed}" is a command; "${word}" is not` };
-  }
-  if (/^—[\w-]/.test(word)) return { from: word, to: "--" + word.slice(1), why: "a long dash before an option is usually --" };
-  if (/^–[\w-]/.test(word)) return { from: word, to: "-" + word.slice(1), why: "an en dash before an option is usually -" };
-  if (/[‘’“”]/.test(word)) {
-    return { from: word, to: word.replace(/[‘’]/g, "'").replace(/[“”]/g, '"'), why: "terminals use straight quotes" };
-  }
-  return null;
-}
-
-/** Suggestions for every word after the prompt of a command line. */
-export function suggestFixes(text: string): Suggestion[] {
-  const { role, prompt } = classifyLine(text);
-  if (role !== "command") return [];
-  return text
-    .slice(prompt.length)
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word, i) => suggestFix(word, i === 0))
-    .filter((s): s is Suggestion => s !== null);
 }
 
 /** Split runs so one starts exactly at `at` (a UTF-16 offset in the line). */

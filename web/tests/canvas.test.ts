@@ -6,11 +6,9 @@ import { render } from "../src/core/render";
 const messages = (html: string) => checkCanvasSafe(html).map((i) => `${i.level}: ${i.message}`);
 
 describe("checkCanvasSafe", () => {
-  it("accepts the renderer's output for every kind", () => {
-    for (const kind of ["terminal", "code", "diagram", "interface"] as const) {
-      const html = render(plainLines(["$ ls -la", "", "total 8"]), kind, "Terminal listing", [0, 0, 0], [255, 255, 255], "A caption");
-      expect(checkCanvasSafe(html)).toEqual([]);
-    }
+  it("accepts the text box renderer's output", () => {
+    const html = render(plainLines(["$ ls -la", "", "total 8"]), "Terminal listing", [0, 0, 0], [255, 255, 255], "A caption");
+    expect(checkCanvasSafe(html)).toEqual([]);
   });
 
   it("rejects elements Canvas removes, and <pre>", () => {

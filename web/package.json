@@ -1,37 +1,26 @@
 {
   "name": "imgtohtml-web",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "Local screenshot to Canvas HTML app, with a TypeScript client and Node server.",
+  "description": "Turns an AI's screenshot report into accessible, responsive Canvas HTML, entirely in the browser.",
   "type": "module",
   "scripts": {
-    "dev": "concurrently --kill-others --names server,client \"tsx watch server/index.ts\" \"vite\"",
-    "build": "npm run typecheck && vite build && esbuild server/index.ts --bundle --platform=node --target=node20 --format=esm --packages=external --outfile=dist-server/index.js",
-    "start": "node dist-server/index.js",
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
     "test": "vitest run",
-    "test:ocr": "tsx scripts/smoke-ocr.ts",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json",
-    "eval": "tsx scripts/eval.ts",
-    "app": "bash start.sh",
-    "test:layout": "tsx scripts/validate-layout.ts"
+    "typecheck": "tsc --noEmit",
+    "eval": "tsx scripts/eval.ts"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
   "dependencies": {
-    "@fastify/multipart": "^10.1.6",
-    "@fastify/static": "^10.1.7",
-    "@tesseract.js-data/eng": "^1.0.0",
-    "bmp-ts": "^1.0.9",
-    "fastify": "^5.12.7",
-    "highlight.js": "^11.11.1",
-    "sharp": "^0.35.5",
-    "tesseract.js": "^7.0.0"
+    "highlight.js": "^11.11.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
     "@types/node": "^22.20.5",
-    "concurrently": "^9.2.5",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

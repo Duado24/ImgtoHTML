@@ -1,8 +1,7 @@
-/** Diagrams (flowcharts, framework maps): an accessible text version of
- *  what the picture shows, read by the vision model. Canvas can't embed
+/** Diagrams (flowcharts, UML, ER schemas, networks): an accessible text
+ *  version of what the picture shows, from the AI report. Canvas can't embed
  *  the screenshot from an HTML fragment, so the image is uploaded to Canvas
- *  separately and this description goes with it. Labels the OCR didn't see
- *  are listed for review, since the vision model may misread them. */
+ *  separately and this description goes with it. */
 
 import { escapeHtml } from "./render";
 
@@ -27,14 +26,6 @@ export interface Diagram {
   edges: DiagramEdge[];
 }
 
-const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-
-/** Node labels with a word the OCR didn't find anywhere in the image. */
-export function unconfirmedLabels(diagram: Diagram, ocrText: string): string[] {
-  const seen = new Set(words(ocrText));
-  return diagram.nodes.map((n) => n.label).filter((label) => words(label).some((w) => !seen.has(w)));
-}
-
 const P = "margin:0 0 8px;";
 const LIST = "margin:0 0 8px;padding-left:24px;";
 
@@ -50,7 +41,7 @@ export function renderDiagram(diagram: Diagram, label: string, caption?: string 
   );
   return (
     `<div role="figure" aria-label="${escapeHtml(label)}" style="max-width:100%;min-width:0;margin:0;">\n` +
-    `  <div style="max-width:100%;box-sizing:border-box;padding:12px 16px;border:1px solid #c7cdd1;border-radius:6px;color:#2d3b45;background-color:#ffffff;font:15px/1.5 Lato,Arial,sans-serif;">\n` +
+    `  <div style="max-width:100%;box-sizing:border-box;padding:12px 16px;border:1px solid #c7cdd1;border-radius:0.75rem;color:#2d3b45;background-color:#ffffff;font:15px/1.5 Lato,Arial,sans-serif;">\n` +
     `    <p style="${P}"><strong>Diagram description:</strong> ${escapeHtml(diagram.summary)}</p>\n` +
     (parts.length ? `    <p style="${P}"><strong>Parts</strong></p>\n    <ul style="${LIST}">\n${parts.join("\n")}\n    </ul>\n` : "") +
     (links.length ? `    <p style="${P}"><strong>Connections</strong></p>\n    <ul style="${LIST}">\n${links.join("\n")}\n    </ul>\n` : "") +

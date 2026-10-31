@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalize, scoreLayout, scoreText, unsupportedWords } from "../src/core/metrics";
+import { normalize, scoreText } from "../src/core/metrics";
 
 describe("scoreText", () => {
   it("scores an exact match as perfect, ignoring trailing spaces and line endings", () => {
@@ -37,33 +37,3 @@ describe("scoreText", () => {
   });
 });
 
-describe("scoreLayout", () => {
-  const box = (x: number, y: number, width: number, height: number) => ({ x, y, width, height });
-  const marked = [{ type: "sidebar", box: box(0, 0, 100, 100) }, { type: "code", box: box(100, 0, 100, 100) }];
-
-  it("scores each marked component by its best same-type overlap", () => {
-    const score = scoreLayout([{ type: "sidebar", box: box(0, 0, 100, 100) }, { type: "code", box: box(150, 0, 50, 100) }], marked);
-    expect(score.components).toEqual([{ type: "sidebar", iou: 1 }, { type: "code", iou: 0.5 }]);
-    expect(score.meanIoU).toBe(0.75);
-  });
-  it("scores 0 without a layout or a component of that type", () => {
-    expect(scoreLayout(null, marked).meanIoU).toBe(0);
-    expect(scoreLayout([{ type: "editor", box: box(100, 0, 100, 100) }], marked).components[1]!.iou).toBe(0);
-  });
-});
-
-describe("unsupportedWords", () => {
-  const ocr = ["“name”:", '"imgtohtml-web",', "Nod", '""vitest'];
-
-  it("finds words the screenshot doesn't show", () => {
-    const html = '<div><span>"name"</span>: <span>"imgtohtml-web",</span></div><div>Nod server",</div>';
-    expect(unsupportedWords(html, ocr)).toEqual(['server",']);
-  });
-  it("decodes numeric entities before comparing", () => {
-    expect(unsupportedWords("<div>Let&#x27;s go&#39;</div>", ["Let's", "go'"])).toEqual([]);
-  });
-  it("ignores quote clean-up, punctuation, numbers and markup", () => {
-    const html = '<table><tr><td aria-hidden="true">12</td><td>&quot;vitest {</td></tr></table><div>› ⌄ }</div>';
-    expect(unsupportedWords(html, ocr)).toEqual([]);
-  });
-});

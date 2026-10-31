@@ -16,7 +16,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      # The review and responsive-layout tests drive a real Chromium.
+      # The page test drives a real Chromium.
       - run: npx playwright install --with-deps chromium
       - run: npm run typecheck
       - run: npm test

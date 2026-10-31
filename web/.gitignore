@@ -1,8 +1,6 @@
 node_modules/
 dist/
-dist-server/
 .claude/
-# Legacy generated browser OCR assets (no longer used or copied).
-public/ocr/
 eval-results/
+# Word corrections saved by the old local version; private.
 corrections/
