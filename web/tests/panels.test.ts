@@ -46,6 +46,23 @@ describe("renderPanels", () => {
     expect(out).toContain("Consolas");
     expect(out).toMatch(/<span style="color:#[0-9a-f]{6};">print<\/span>/);
   });
+
+  it("draws a log's line numbers and highlighted lines, edge to edge, readable", () => {
+    const log = region({
+      id: "log", type: "terminal", background: "#0d1117", color: "#e6edf3", first_line: 2710,
+      lines: ["Error: R]", "", "✅ Git collaboration"],
+      highlights: [{ lines: [1], background: "#3d1d20", color: "#ff0000" }, { lines: [3], color: "#3fb950" }],
+    });
+    const out = renderPanels([log], "website", "Log").html;
+    expect(out).toContain('aria-hidden="true"');
+    expect(out).toMatch(/>2710<\/div>[\s\S]*>2711<\/div>[\s\S]*>2712<\/div>/);
+    expect(out).not.toContain("2710 ");
+    expect(out).toContain("margin:0 -14px;padding:0 14px;background-color:#3d1d20;");
+    const red = out.match(/<span style="color:(#[0-9a-f]{6});">Error: R\]<\/span>/)![1]!;
+    expect(contrast(hexRgb(red), hexRgb("#3d1d20"))).toBeGreaterThanOrEqual(4.5);
+    expect(out).toMatch(/<span style="color:#3fb950;">✅ Git collaboration<\/span>/);
+    expect(checkCanvasSafe(out)).toEqual([]);
+  });
 });
 
 describe("withCutOff", () => {

@@ -44,6 +44,17 @@ describe("screenshot reports", () => {
     }
   });
 
+  it("checks highlights: line numbers in range, a hex background or color", () => {
+    const withHighlights = (highlights: unknown) => parse(report({ regions: [{ id: "log", type: "terminal", parent: null, lines: ["a", "b"], highlights }] }));
+    const good = withHighlights([{ lines: [1, 2], background: "#3d1d20", color: "#fff" }, { lines: [2], color: "#3fb950" }]);
+    expect(good.ok && good.report.regions[0]!.highlights).toEqual([{ lines: [1, 2], background: "#3d1d20", color: "#ffffff" }, { lines: [2], color: "#3fb950" }]);
+    const bad = withHighlights([{ lines: [3], background: "red" }, { lines: [1] }]);
+    expect(bad.ok).toBe(false);
+    if (bad.ok) return;
+    const all = bad.problems.join("\n");
+    for (const problem of [/lines must be line numbers from 1 to 2/, /background must be a hex color/, /needs a background, a color or both/]) expect(all).toMatch(problem);
+  });
+
   it("rejects text that isn't a report", () => {
     expect(parse("not json")).toMatchObject({ ok: false, problems: [expect.stringMatching(/isn't valid JSON/)] });
     expect(parse("[1, 2]")).toMatchObject({ ok: false, problems: ["The report must be one JSON object."] });

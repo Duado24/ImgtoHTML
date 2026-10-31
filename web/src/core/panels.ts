@@ -36,8 +36,10 @@ const PX_PER_UNIT = 0.72;
 
 const WHOLE: Box = { x: 0, y: 0, width: 1000, height: 1000 };
 
-/** The color halfway-ish between background and text: borders that show on either. */
-const borderOf = (background: RGB, text: RGB): RGB => background.map((v, i) => Math.round(v + (text[i]! - v) * 0.22)) as unknown as RGB;
+/** A color `share` of the way from background to text. */
+const mix = (background: RGB, text: RGB, share: number): RGB => background.map((v, i) => Math.round(v + (text[i]! - v) * share)) as unknown as RGB;
+/** Borders that show on either background or text. */
+const borderOf = (background: RGB, text: RGB): RGB => mix(background, text, 0.22);
 
 /** Siblings in reading order, grouped into rows of boxes side by side. */
 function rows(regions: readonly ReportRegion[]): ReportRegion[][] {
@@ -92,6 +94,31 @@ export function renderPanels(
     return painted.map((line) => ({ ...line, runs: line.runs.map((run) => (run.color ? { ...run, color: fixContrast(run.color, background) } : run)) }));
   }
 
+  /** The region's lines, each highlight drawn edge to edge, and a line-number
+   *  gutter when the report gives first_line (code panels inside apps, logs). */
+  function linesHtml(region: ReportRegion, background: RGB, color: RGB, indent: string): string {
+    const painted = paint(region, background);
+    const marks = new Map<number, { background?: RGB; color: RGB }>();
+    for (const h of region.highlights ?? []) {
+      const bg = h.background ? hexRgb(h.background) : undefined;
+      const fg = fixContrast(h.color ? hexRgb(h.color) : color, bg ?? background);
+      for (const n of h.lines) marks.set(n - 1, { ...(bg ? { background: bg } : {}), color: fg });
+    }
+    const first = region.first_line;
+    const digits = first ? String(first + painted.length - 1).length : 0;
+    const muted = mix(background, color, 0.6);
+    return painted.map((line, i) => {
+      const mark = marks.get(i);
+      const text = mark ? { runs: line.runs.map((r) => ({ ...r, color: fixContrast(r.color ?? mark.color, mark.background ?? background) })) } : line;
+      const inherited = lineText(line) ? color : undefined;
+      const row = mark?.background ? `margin:0 -14px;padding:0 14px;background-color:${rgbHex(mark.background)};` : "";
+      if (!first) return row ? `${indent}<div style="${row}">${lineDiv(text, WRAP, "", inherited)}</div>` : lineDiv(text, WRAP, indent, inherited);
+      const number = `<div aria-hidden="true" style="flex:0 0 ${digits + 2}ch;box-sizing:border-box;text-align:right;padding-right:2ch;` +
+        `color:${rgbHex(fixContrast(muted, mark?.background ?? background))};">${first + i}</div>`;
+      return `${indent}<div style="display:flex;min-width:0;${row}">${number}${lineDiv(text, `flex:1;min-width:0;${WRAP}`, "", inherited)}</div>`;
+    }).join("\n");
+  }
+
   function itemsHtml(region: ReportRegion, indent: string): string {
     // Tabs and toolbars: the items of each line become chips that wrap.
     return region.lines.map((line) => {
@@ -109,7 +136,7 @@ export function renderPanels(
     const font = mono ? `font:14px/1.5 ${MONO};` : `font:15px/1.5 ${SANS};`;
     const body = !own ? ""
       : region.type === "tabs" || region.type === "toolbar" || region.type === "breadcrumbs" ? itemsHtml(region, indent + "  ")
-      : paint(region, background).map((l) => lineDiv(l, WRAP, indent + "  ", lineText(l) ? color : undefined)).join("\n");
+      : linesHtml(region, background, color, indent + "  ");
     const inner = [body, group(children, { background, color }, indent + "  ")].filter(Boolean).join("\n");
     if (!inner) return "";
     const weight = region.type === "tabs" || region.type === "toolbar" ? "font-weight:600;" : "";

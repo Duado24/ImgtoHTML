@@ -17,7 +17,8 @@
  *        { "id": "code", "type": "code", "parent": null,
  *          "box": { "x": 180, "y": 90, "width": 820, "height": 910 },
  *          "lines": ["{", "  \"name\": \"imgtohtml-web\",", "  \"description\": \"Local app and Nod"],
- *          "cut_off_lines": [3], "unsure_words": ["Nod"] }
+ *          "cut_off_lines": [3], "unsure_words": ["Nod"],
+ *          "highlights": [{ "lines": [2], "background": "#5a1e1e", "color": "#ffdcd7" }] }   // optional
  *      ],
  *      "diagram": { "summary": "…", "nodes": [...], "edges": [...] },   // diagram only
  *      "notes": "anything for the designer; never shown on the page"
@@ -59,12 +60,23 @@ export interface ReportRegion {
   background?: string;
   color?: string;
   lines: string[];
-  /** Code: the editor's number for the first line, when the screenshot doesn't start at line 1. */
+  /** Code and logs: the number the viewer shows beside the first line. Code
+   *  uses it when it isn't 1; other regions show a line-number gutter. */
   first_line?: number;
+  /** Lines drawn with their own background (error lines, a search match). */
+  highlights?: Highlight[];
   /** 1-based numbers of lines the screenshot cuts off at its edge. */
   cut_off_lines?: number[];
   /** Words the AI isn't sure it read right. */
   unsure_words?: string[];
+}
+
+export interface Highlight {
+  /** 1-based numbers of the region's lines. */
+  lines: number[];
+  /** At least one of the two. */
+  background?: string;
+  color?: string;
 }
 
 export interface ScreenshotReport {
@@ -84,7 +96,7 @@ export type ReportResult =
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const TOP_KEYS = ["format", "version", "kind", "application", "language", "regions", "diagram", "notes"];
-const REGION_KEYS = ["id", "type", "parent", "box", "background", "color", "lines", "first_line", "cut_off_lines", "unsure_words"];
+const REGION_KEYS = ["id", "type", "parent", "box", "background", "color", "lines", "first_line", "highlights", "cut_off_lines", "unsure_words"];
 
 /** Accept the JSON as an AI usually hands it over: possibly inside a ```json fence. */
 function unwrap(text: string): string {
@@ -115,6 +127,25 @@ function checkBox(value: unknown, where: string, problems: string[]): Box | unde
     return undefined;
   }
   return { x: bx!, y: by!, width: bw!, height: bh! };
+}
+
+function checkHighlights(value: unknown, count: number, where: string, problems: string[]): Highlight[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) { problems.push(`${where}: highlights must be a list of { lines, background, color }`); return undefined; }
+  const out: Highlight[] = [];
+  for (const [i, h] of value.entries()) {
+    const at = `${where}: highlights[${i}]`;
+    if (!isObject(h)) { problems.push(`${at} must be an object with lines and background`); continue; }
+    const ok = Array.isArray(h.lines) && h.lines.length > 0 && h.lines.every((n) => Number.isInteger(n) && n >= 1 && n <= count);
+    if (!ok) problems.push(`${at}: lines must be line numbers from 1 to ${count}`);
+    const background = h.background === undefined ? undefined : hexColor(h.background);
+    const color = h.color === undefined ? undefined : hexColor(h.color);
+    if (background === null) problems.push(`${at}: background must be a hex color such as "#5a1e1e"`);
+    if (color === null) problems.push(`${at}: color must be a hex color such as "#ffdcd7"`);
+    if (!background && !color && background !== null && color !== null) problems.push(`${at} needs a background, a color or both`);
+    if (ok && (background || color) && background !== null && color !== null) out.push({ lines: h.lines as number[], ...(background ? { background } : {}), ...(color ? { color } : {}) });
+  }
+  return out;
 }
 
 function checkDiagram(value: unknown, problems: string[]): Diagram | undefined {
@@ -194,10 +225,12 @@ export function parseReport(text: string): ReportResult {
       if (unsure !== undefined && (!Array.isArray(unsure) || !unsure.every((w) => typeof w === "string"))) problems.push(`${where}: unsure_words must be a list of words`);
       const first = r.first_line;
       if (first !== undefined && (!Number.isInteger(first) || (first as number) < 1)) problems.push(`${where}: first_line must be a whole number from 1`);
+      const highlights = checkHighlights(r.highlights, lines.length, where, problems);
       regions.push({
         id: String(r.id), type: r.type as Component, parent: typeof r.parent === "string" ? r.parent : null,
         ...(box ? { box } : {}), ...colors, lines: lines as string[],
         ...(Number.isInteger(first) ? { first_line: first as number } : {}),
+        ...(highlights ? { highlights } : {}),
         ...(Array.isArray(cut) ? { cut_off_lines: cut as number[] } : {}),
         ...(Array.isArray(unsure) ? { unsure_words: unsure as string[] } : {}),
       });
