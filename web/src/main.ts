@@ -5,6 +5,7 @@ import { issuesFor, type ConvertResult, type OutputFile } from "./core/convert";
 import type { ModelRegion } from "./core/model";
 import { isKind } from "./core/types";
 import { SUPPORTED, type JobProgress, type JobResult } from "./shared/api";
+import { parseReport } from "./core/report";
 import { cancelJob, convertOnServer, decide, editSpan, retryRegion } from "./browser/api";
 
 const MAX_MB = 25;
@@ -23,6 +24,7 @@ const cancel = $<HTMLButtonElement>("cancel");
 const reconvert = $<HTMLButtonElement>("reconvert");
 const labelInput = $<HTMLInputElement>("label");
 const captionInput = $<HTMLInputElement>("caption");
+const reportInput = $<HTMLTextAreaElement>("report");
 
 let file: File | null = null;
 let lastHTML = "";
@@ -99,6 +101,33 @@ function updateProgress(message: string, progress?: JobProgress) {
   say(text);
 }
 
+/* ── AI report: checked as it is pasted, so problems can go back to the AI
+   before converting. Boxes are on a 0–1000 grid, so the image size doesn't
+   matter here; the server checks it again against the real screenshot. ── */
+const REPORT_HELP = $("report-status").textContent ?? "";
+reportInput.oninput = () => {
+  const status = $("report-status");
+  status.classList.remove("report-error");
+  const text = reportInput.value.trim();
+  if (!text) { status.textContent = REPORT_HELP; return; }
+  const parsed = parseReport(text, 1000, 1000);
+  if (!parsed.ok) {
+    status.classList.add("report-error");
+    status.replaceChildren(
+      el("span", "", `The report has ${parsed.problems.length === 1 ? "a problem" : `${parsed.problems.length} problems`}. Send ${parsed.problems.length === 1 ? "it" : "them"} back to the AI:`),
+      el("ul", ""),
+    );
+    status.lastElementChild!.append(...parsed.problems.map((p) => el("li", "", p)));
+    return;
+  }
+  const { report, warnings } = parsed.value;
+  // The AI looked at the picture: its type wins.
+  const kindInput = document.getElementById(`k-${report.kind}`) as HTMLInputElement | null;
+  if (kindInput) kindInput.checked = true;
+  const regions = report.regions.length;
+  status.textContent = `Report ready: ${report.kind} screenshot, ${regions} ${regions === 1 ? "part" : "parts"}.${warnings.length ? ` ${warnings.join(" ")}` : ""}`;
+};
+
 /* ── File choice / drag and drop ────────────────── */
 const drop = $("drop");
 const input = $<HTMLInputElement>("file");
@@ -170,6 +199,7 @@ async function run(transcriptText?: string) {
       caption: captionInput.value,
       transcript: transcriptText,
       editorWindow: $<HTMLInputElement>("window").checked,
+      report: reportInput.value,
     }, updateProgress, (id) => { jobId = id; cancel.disabled = false; });
     if (/\.tiff?$/i.test(file.name)) $<HTMLImageElement>("orig").src = result.imageDataUrl;
     show(result, result.preview);

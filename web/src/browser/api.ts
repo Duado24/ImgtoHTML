@@ -10,6 +10,8 @@ export interface ConversionOptions {
   transcript?: string;
   /** Code: draw the editor window around the code (default true). */
   editorWindow?: boolean;
+  /** An AI report (src/core/report.ts) to use in place of the vision model. */
+  report?: string;
 }
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
@@ -36,6 +38,7 @@ export async function convertOnServer(
   form.append("caption", options.caption);
   if (options.transcript !== undefined) form.append("transcript", options.transcript);
   if (options.editorWindow === false) form.append("window", "off");
+  if (options.report?.trim()) form.append("report", options.report);
   progress("Opening the image…", { progress: "Opening the image…", percent: 0, stage: "queued", step: 0, totalSteps: 5 });
   const { id } = await json<{ id: string }>("/api/convert", { method: "POST", body: form });
   onJob?.(id);

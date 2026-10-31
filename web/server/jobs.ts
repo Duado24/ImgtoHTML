@@ -12,6 +12,7 @@ import { countWordsToCheck, type ReviewState } from "../src/core/model";
 import type { Box, OcrWord } from "../src/core/types";
 import { cropPixels } from "../src/core/preprocess";
 import { lookalikeFixes } from "../src/core/vision";
+import { applyReportReadings, dropReportNoise, flagReportChanges, type ReportInputs } from "../src/core/report";
 import { NullVisionModel, type VisionModel } from "./vision";
 import type { Job, JobProgress, JobResult, JobStage } from "../src/shared/api";
 import type { DecodedImage } from "./image";
@@ -75,6 +76,10 @@ interface Session {
   edited: Set<string>;
   /** Checklist membership survives edits and focused re-reads. */
   checklist: Set<string>;
+  /** An AI report pasted with the screenshot: it replaces the vision model. */
+  report?: ReportInputs;
+  /** Boxes of words the reviewer typed; the report never overrides them. */
+  typed: Box[];
 }
 
 interface Entry {
@@ -196,6 +201,8 @@ export class Jobs {
   /** Convert again from the session's words, readings and decisions. */
   private finalize(session: Session): JobResult {
     const { input, image } = session;
+    // Who read the screenshot besides OCR: the pasted AI report, the vision model, or no one.
+    const reader = session.report ? "AI report" : this.usesVision ? this.vision.name : null;
     const build = (words: OcrWord[]) => {
       let result: ConvertResult = convert({ ...input, pixels: image.pixels, animated: image.animated, words, layout: session.layout?.layout });
       // convert() only knows no layout reached it; say why.
@@ -206,7 +213,7 @@ export class Jobs {
       }
       const review = { ...result.review, layout_status: status, server_build: BUILD_ID };
       result = { ...result, review, reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) } };
-      if (this.usesVision) {
+      if (reader) {
         // Each reading goes to the region it overlaps most. Several readings
         // can share one region (a layout's tabs, breadcrumb and code inside
         // one OCR panel): their text joins top to bottom, and the largest
@@ -224,14 +231,30 @@ export class Jobs {
           role: rs.reduce((a, b) => (b.box.width * b.box.height > a.box.width * a.box.height ? b : a)).role,
           text: [...rs].sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x).map((r) => r.text).join("\n"),
         }));
-        result = addVision(result, this.vision.name, readings, session.visionError);
+        result = addVision(result, reader, readings, session.visionError);
       }
       return result;
     };
     let result = build(session.words);
+    if (session.report) {
+      // A strong AI read the text better than OCR: its words win, OCR keeps
+      // their positions and colors, and every change goes on the checklist.
+      const noise = dropReportNoise(session.words, session.readings, session.typed);
+      if (noise.dropped.length) result = build(noise.words);
+      const applied = applyReportReadings(noise.words, result.model, session.typed);
+      if (applied.changed.length) result = build(applied.words);
+      const model = flagReportChanges(result.model, applied.changed);
+      const review = { ...result.review, report: {
+        changed: applied.changed.map(({ from, to }) => ({ from, to })),
+        dropped: noise.dropped.map((d) => d.text),
+        warnings: session.report.warnings,
+        layout_problem: session.report.layoutProblem,
+      } };
+      result = { ...result, model, review, reviewFile: { ...result.reviewFile, content: JSON.stringify(review, null, 2) } };
+    }
     // Unsure words the vision model read with only lookalike characters
     // changed are taken as fixed: convert again with its reading.
-    const fixes = this.usesVision ? lookalikeFixes(result.model) : [];
+    const fixes = this.usesVision && !session.report ? lookalikeFixes(result.model) : [];
     if (fixes.length) {
       const corrected = session.words.map((w) => {
         const fix = fixes.find((f) => sameBox(w, f.box));
@@ -332,10 +355,12 @@ export class Jobs {
     return readings.map((r) => ({ box: boxes.get(r.regionId)!, role: r.role, text: r.text }));
   }
 
-  submit(input: Submission, image: DecodedImage, release: () => void): string {
+  /** `report`: an AI report checked against this image (parseReport); it
+   *  takes the vision model's place. */
+  submit(input: Submission, image: DecodedImage, release: () => void, report?: ReportInputs): string {
     this.prune();
     const id = randomUUID();
-    const entry: Entry = { session: { input, image, words: [], readings: [], decisions: new Map(), edited: new Set(), checklist: new Set() }, job: { id, status: "queued", ...QUEUED } };
+    const entry: Entry = { session: { input, image, words: [], readings: [], decisions: new Map(), edited: new Set(), checklist: new Set(), report, typed: [] }, job: { id, status: "queued", ...QUEUED } };
     this.entries.set(id, entry);
     this.queue(id, entry, async (progress, check) => {
       const session = entry.session!;
@@ -346,6 +371,18 @@ export class Jobs {
       check();
       session.words = words;
       progress("detect-layout", "Finding the layout…");
+      if (session.report) {
+        progress("vision", "Applying the AI report…");
+        const { layout, layoutProblem, readings, diagram } = session.report;
+        if (!input.transcript?.trim()) {
+          session.layout = { layout, attempts: [] };
+          if (!layout) session.layoutNote = `the AI report's regions don't form a layout: ${layoutProblem}`;
+        }
+        session.readings = readings;
+        if (input.kind === "diagram" && diagram) session.diagram = diagram;
+        check();
+        return;
+      }
       if (!this.usesVision) session.layoutNote = "the vision model is off";
       else if (!this.vision.detectLayout) session.layoutNote = `${this.vision.name} doesn't detect layouts`;
       if (this.usesVision) {
@@ -420,6 +457,7 @@ export class Jobs {
     const { symbols: _drop, ...word } = session.words[index]!;
     session.words[index] = { ...word, text: clean, confidence: 100 };
     session.edited.add(region.id);
+    session.typed.push(span.box);
     entry.job = { id, status: "completed", result: this.finalize(session) };
     this.account(entry);
     this.prune();

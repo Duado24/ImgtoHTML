@@ -121,6 +121,8 @@ input[type=text], textarea {
   padding: 10px 12px; font: 400 13px/1.45 var(--sans);
 }
 textarea { font-family: var(--mono); resize: vertical; }
+.report-error { color: var(--coral); }
+.report-error ul { margin: 6px 0 0; padding-left: 18px; }
 input[type=text]:focus, textarea:focus { outline: none; border-color: var(--accent); }
 
 .btn {
@@ -143,7 +145,7 @@ input[type=text]:focus, textarea:focus { outline: none; border-color: var(--acce
 .progress-label { margin: 14px 0 0; font-size: 13px; }
 
 .status { margin-top: 12px; font: 400 12px/1.5 var(--mono); color: var(--muted); min-height: 18px; }
-.status.err { color: var(--coral); }
+.status.err { color: var(--coral); white-space: pre-line; }
 
 /* ── Workspace ──────────────────────────────────────── */
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }

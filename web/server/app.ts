@@ -6,6 +6,7 @@ import { isKind } from "../src/core/types";
 import { MAX_UPLOAD_BYTES } from "../src/shared/api";
 import { BUILD_ID, STARTED } from "./build";
 import { decodeImage, InvalidImage } from "./image";
+import { parseReport } from "../src/core/report";
 import { Jobs, ReviewError } from "./jobs";
 import type { Job } from "../src/shared/api";
 import { LocalOcr } from "./ocr";
@@ -70,7 +71,7 @@ export async function createApp(options: AppOptions = {}) {
   });
 
   await app.register(multipart, {
-    limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 5, parts: 6, fieldSize: 1024 * 1024 },
+    limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 6, parts: 7, fieldSize: 1024 * 1024 },
   });
 
   app.post("/api/convert", async (request, reply) => {
@@ -89,7 +90,7 @@ export async function createApp(options: AppOptions = {}) {
           fileName = part.filename.split(/[\\/]/).pop()!;
           image = await part.toBuffer();
         } else {
-          if (!["kind", "label", "caption", "transcript", "window"].includes(part.fieldname) || fields.has(part.fieldname)) {
+          if (!["kind", "label", "caption", "transcript", "window", "report"].includes(part.fieldname) || fields.has(part.fieldname)) {
             throw new InvalidImage("Unexpected or duplicate form field.");
           }
           if (part.valueTruncated || part.fieldnameTruncated) return reply.code(413).send({ error: "A form field is too large (maximum 1 MB)." });
@@ -97,13 +98,21 @@ export async function createApp(options: AppOptions = {}) {
         }
       }
       if (!image?.length) throw new InvalidImage("Choose a screenshot to convert.");
-      const kind = fields.get("kind") ?? "terminal";
-      if (!isKind(kind)) throw new InvalidImage("Choose a supported screenshot type.");
+      const chosen = fields.get("kind") ?? "terminal";
+      if (!isKind(chosen)) throw new InvalidImage("Choose a supported screenshot type.");
       const decoded = await decodeImage(image, fileName);
+      // An AI report is checked against this image; it decides the type, since it looked at the picture.
+      const reportText = fields.get("report")?.trim();
+      const parsed = reportText ? parseReport(reportText, decoded.pixels.width, decoded.pixels.height) : null;
+      if (parsed && !parsed.ok) {
+        return reply.code(400).send({ error: `The AI report has problems:\n• ${parsed.problems.join("\n• ")}` });
+      }
+      const report = parsed?.ok ? parsed.value : undefined;
+      const kind = report ? report.report.kind : chosen;
       const id = jobs.submit({
         fileName, kind, label: fields.get("label"), caption: fields.get("caption"), transcript: fields.get("transcript"),
         editorWindow: fields.get("window") !== "off",
-      }, decoded, () => { active--; });
+      }, decoded, () => { active--; }, report);
       submitted = true;
       return reply.code(202).header("Location", `/api/jobs/${id}`).send({ id });
     } finally {

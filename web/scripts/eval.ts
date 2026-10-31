@@ -2,7 +2,12 @@
  *  through the same job the app runs: OCR, layout detection, vision
  *  readings, lookalike corrections, rendering.
  *
- *    npm run eval [-- --save-baseline] [-- --only <text>] [-- --refresh-vision] [-- --allow-empty]
+ *    npm run eval [-- --save-baseline] [-- --only <text>] [-- --refresh-vision] [-- --allow-empty] [-- --reports]
+ *
+ *  With --reports, a screenshot that has an AI report next to it
+ *  (<name>.report.json, src/core/report.ts) is converted with that report
+ *  in place of the vision model, as the app does when one is pasted. Scores
+ *  then differ from a normal run: compare them, don't save them as the baseline.
  *
  *  The vision model's answers are saved next to each screenshot
  *  (<name>.vision.json) and replayed, so runs repeat exactly; only missing
@@ -31,6 +36,7 @@ import { Jobs } from "../server/jobs";
 import { LocalOcr } from "../server/ocr";
 import { OllamaVisionModel, type VisionModel, type VisionRegion } from "../server/vision";
 import { cutOffTokens, withoutCutOffAnnotations } from "./eval-text";
+import { parseReport } from "../src/core/report";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURES = join(ROOT, "fixtures");
@@ -72,6 +78,11 @@ interface Entry {
 const args = process.argv.slice(2);
 const saveBaseline = args.includes("--save-baseline");
 const refreshVision = args.includes("--refresh-vision");
+const useReports = args.includes("--reports");
+if (useReports && args.includes("--save-baseline")) {
+  console.error("--reports scores differ from a normal run; don't save them as the baseline.");
+  process.exit(1);
+}
 const only = args[args.indexOf("--only") + 1];
 const filter = args.includes("--only") ? only : undefined;
 
@@ -182,7 +193,11 @@ try {
     const image = await decodeImage(bytes, basename(path));
     // One job per screenshot, exactly as the server runs it.
     const jobs = new Jobs(engine, vision, null);
-    const id = jobs.submit({ fileName: basename(path), kind, label: meta.label }, image, () => {});
+    const reportText = useReports ? await sidecar(path, ".report.json") : null;
+    const parsed = reportText === null ? null : parseReport(reportText, image.pixels.width, image.pixels.height);
+    if (parsed && !parsed.ok) throw new Error(`${file}: its report has problems:\n  ${parsed.problems.join("\n  ")}`);
+    const report = parsed?.ok ? parsed.value : undefined;
+    const id = jobs.submit({ fileName: basename(path), kind: report?.report.kind ?? kind, label: meta.label }, image, () => {}, report);
     let job = jobs.get(id)!;
     while (job.status === "queued" || job.status === "running") {
       await sleep(20);

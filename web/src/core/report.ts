@@ -32,7 +32,9 @@
 
 import { COMPONENTS, APPLICATIONS, checkLayout, type VisionLayout } from "./vision-layout";
 import type { Diagram } from "./diagram";
-import { KINDS, type Box, type Kind } from "./types";
+import type { ScreenshotModel } from "./model";
+import { onlyLookalikes } from "./vision";
+import { KINDS, type Box, type Kind, type OcrWord } from "./types";
 
 export const REPORT_FORMAT = "imgtohtml-report";
 export const REPORT_VERSION = 1;
@@ -213,6 +215,114 @@ export function parseReport(text: string, width: number, height: number): Report
   }, width, height);
   const readings = regions.filter((r) => r.lines.some((l) => l.trim())).map((r) => ({ box: toPixels(r.box), role: r.type, text: r.lines.join("\n") }));
   return { ok: true, value: { report, layout: checked.layout, layoutProblem: checked.problem, readings, diagram: diagram ?? null, warnings } };
+}
+
+/** OCR confidence (0–100) under which a short word the report never mentions counts as noise. */
+const NOISE_CONFIDENCE = 60;
+/** Longest "word" that can be dropped as noise: window buttons and icons read as "Oo", "@", "fA". */
+const NOISE_CHARS = 3;
+
+export interface ReportChange { box: Box; from: string; to: string }
+
+const sameBox = (a: Box, b: Box) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+
+/** Step 1 of trusting a report: drop OCR noise it doesn't contain. A short
+ *  OCR "word" (window buttons and icons read as "Oo", "@", "fA") that is
+ *  unsure or has no letters, and that the report has nowhere, is removed.
+ *  Done before comparing words, so noise doesn't stop lines lining up. */
+export function dropReportNoise(
+  words: readonly OcrWord[],
+  readings: readonly ReportReading[],
+  /** Words the reviewer typed: never dropped. */
+  locked: readonly Box[] = [],
+): { words: OcrWord[]; dropped: { box: Box; text: string }[] } {
+  const tokens = new Set(readings.flatMap((r) => r.text.split(/\s+/)).filter(Boolean));
+  // In code and terminals every character counts: a "t" may be a misread "{"
+  // that the code clean-up repairs, so nothing there is dropped.
+  const exact = readings.filter((r) => r.role === "code" || r.role === "terminal").map((r) => r.box);
+  const inside = (w: OcrWord, b: Box) => w.x + w.width / 2 >= b.x && w.x + w.width / 2 <= b.x + b.width && w.y + w.height / 2 >= b.y && w.y + w.height / 2 <= b.y + b.height;
+  const kept: OcrWord[] = [];
+  const dropped: { box: Box; text: string }[] = [];
+  for (const word of words) {
+    // Numbers stay too: a code editor's line numbers are left out of the
+    // report's text, but the code clean-up needs them to find each line.
+    const noise = !locked.some((box) => sameBox(box, word)) && !exact.some((box) => inside(word, box))
+      && !tokens.has(word.text) && [...word.text].length <= NOISE_CHARS
+      && !/^\d+$/.test(word.text) && (word.confidence < NOISE_CONFIDENCE || !/[\p{L}\p{N}]/u.test(word.text));
+    if (noise) dropped.push({ box: { x: word.x, y: word.y, width: word.width, height: word.height }, text: word.text });
+    else kept.push(word);
+  }
+  return { words: kept, dropped };
+}
+
+/** Character edits between two words, over their length: 0 = same, 1 = nothing in common. */
+function difference(a: string, b: string): number {
+  const x = [...a], y = [...b];
+  let previous = Array.from({ length: y.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= x.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= y.length; j++) current.push(Math.min(previous[j - 1]! + (x[i - 1] === y[j - 1] ? 0 : 1), previous[j]! + 1, current[j - 1]! + 1));
+    previous = current;
+  }
+  return previous[y.length]! / Math.max(1, x.length, y.length);
+}
+
+/** Most of a word that may differ for the report's reading to replace OCR's. */
+const SAME_WORD = 0.4;
+
+/** True when two readings are plausibly the same word misread ("HIML" →
+ *  "HTML", "packagejson" → "package.json", curly → straight quotes), not
+ *  two different words that line alignment happened to pair up ("Debug" →
+ *  "{" where the report rightly left an editor hint out). */
+export function sameWord(ocr: string, report: string): boolean {
+  return onlyLookalikes(ocr, report) || difference(ocr, report) <= SAME_WORD;
+}
+
+/** Step 2: where the report and OCR read the same word differently, use the
+ *  report's word. `model` is a conversion of `words` whose spans already
+ *  carry the report's readings (addVision). OCR keeps where each word sits
+ *  and its colors; its own reading stays available to the reviewer
+ *  (flagReportChanges). A disagreement that isn't the same word stays a
+ *  suggestion on the checklist. Words the report has but OCR missed can't be
+ *  placed, so they aren't added. */
+export function applyReportReadings(
+  words: readonly OcrWord[],
+  model: ScreenshotModel,
+  /** Words the reviewer typed: never changed. */
+  locked: readonly Box[] = [],
+): { words: OcrWord[]; changed: ReportChange[] } {
+  const changes: ReportChange[] = model.regions.flatMap((r) => r.lines.flatMap((l) => l.spans)).flatMap((span) => {
+    const to = span.alternatives.find((a) => a.source === "vision")?.text;
+    return to && to !== span.text && sameWord(span.text, to) ? [{ box: span.box, from: span.text, to }] : [];
+  });
+  const changed: ReportChange[] = [];
+  const result = words.map((word) => {
+    const change = !locked.some((box) => sameBox(box, word)) && changes.find((c) => sameBox(c.box, word));
+    if (!change) return word;
+    changed.push(change);
+    // Per-letter boxes belong to the old text; colors fall back to the word's box.
+    const { symbols: _old, ...rest } = word;
+    return { ...rest, text: change.to, confidence: 100 };
+  });
+  return { words: result, changed };
+}
+
+/** Put every word the report changed on the review checklist, with OCR's
+ *  reading as the alternative, so the reviewer can see and undo each change. */
+export function flagReportChanges(model: ScreenshotModel, changed: readonly ReportChange[]): ScreenshotModel {
+  return {
+    ...model,
+    regions: model.regions.map((region) => {
+      const flags = [...region.flags];
+      const lines = region.lines.map((line) => ({ ...line, spans: line.spans.map((span) => {
+        const change = changed.find((c) => sameBox(c.box, span.box));
+        if (!change) return span;
+        flags.push({ reason: "sources-disagree", spanId: span.id, detail: `The AI report read "${change.to}"; the app's OCR read "${change.from}"` });
+        return { ...span, alternatives: [...span.alternatives.filter((a) => a.text !== change.from), { source: "ocr" as const, text: change.from, confidence: null }] };
+      }) }));
+      return flags.length === region.flags.length ? region : { ...region, lines, flags, review: "pending" as const };
+    }),
+  };
 }
 
 /** All of a report's text, in the order the report lists its regions (the

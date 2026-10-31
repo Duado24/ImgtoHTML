@@ -93,6 +93,9 @@ export interface Review {
   /** The vision model that also read the screenshot, or null when none ran. */
   /** `corrected`: OCR words replaced by the vision model's reading (lookalike characters only). */
   vision: { model: string; regions_read: number; error?: string; corrected?: { from: string; to: string }[] } | null;
+  /** An AI report pasted with the screenshot: words it changed (each on the
+   *  checklist), OCR noise it removed, and format warnings. */
+  report?: { changed: { from: string; to: string }[]; dropped: string[]; warnings: string[]; layout_problem: string | null };
   privacy: {
     home_path_masking: boolean;
     learned_email_identity_masking: boolean;
@@ -750,6 +753,13 @@ export function issuesFor(result: ConvertResult): Issue[] {
   }
   if (review.vision?.error) {
     issues.push({ level: "warn", text: `Vision model didn't run (${review.vision.error}); OCR only.` });
+  }
+  if (review.report) {
+    const { changed, dropped, warnings, layout_problem } = review.report;
+    issues.push({ level: "info", text: `Text from the AI report: ${changed.length} ${changed.length === 1 ? "word" : "words"} changed from the app's own reading, each on the checklist.` });
+    if (dropped.length) issues.push({ level: "info", text: "Removed as noise (not in the AI report, and too short or unsure to be text):", words: dropped });
+    if (layout_problem) issues.push({ level: "warn", text: `The AI report's regions couldn't be used as the layout (${layout_problem}); its text was still used.` });
+    for (const warning of warnings) issues.push({ level: "warn", text: `AI report: ${warning}` });
   }
   if (review.diagram) {
     issues.push({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseReport, reportText } from "../src/core/report";
+import { parseReport, reportText, sameWord } from "../src/core/report";
 
 const report = (over: Record<string, unknown> = {}) => ({
   format: "imgtohtml-report", version: 1, kind: "code", application: "ide", language: "json",
@@ -88,6 +88,17 @@ describe("screenshot reports", () => {
   it("warns about fields it doesn't know instead of failing", () => {
     const result = parse(report({ confidence: "high" }));
     expect(result.ok && result.value.warnings).toEqual(['Ignored unknown field "confidence".']);
+  });
+
+  it("replaces OCR's word only when both readings are the same word", () => {
+    // Misreads the report fixes (from the VS Code test screenshot).
+    for (const [ocr, report] of [["HIML", "HTML"], ["packagejson", "package.json"], ["imgtoHTML", "ImgtoHTML"], ["“description”:", '"description":'], ["“dev”:", '"dev":'], ["l", "I"]]) {
+      expect(sameWord(ocr!, report!), `${ocr} → ${report}`).toBe(true);
+    }
+    // Different words that line alignment paired up: an editor hint, a line number, a close button, a password.
+    for (const [ocr, report] of [["Debug", "{"], ["16", "},"], ["X", "package.json"], ["OK", "●●●●●●●●"]]) {
+      expect(sameWord(ocr!, report!), `${ocr} → ${report}`).toBe(false);
+    }
   });
 
   it("joins the text in the order the report lists its regions", () => {

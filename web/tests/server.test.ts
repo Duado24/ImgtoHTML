@@ -163,6 +163,69 @@ describe("local conversion API / Python parity", () => {
     expect(engine.recognize).not.toHaveBeenCalled();
   });
 
+  describe("with an AI report", () => {
+    // OCR misreads "-la" as "-Ia" and reads a window button as "Oo".
+    const read: OcrWord[] = [
+      { text: "ls", x: 10, y: 10, width: 20, height: 14, confidence: 96, block: 0, paragraph: 0, line: 0 },
+      { text: "-Ia", x: 40, y: 10, width: 30, height: 14, confidence: 88, block: 0, paragraph: 0, line: 0 },
+      { text: "Oo", x: 250, y: 10, width: 20, height: 14, confidence: 31, block: 0, paragraph: 0, line: 0 },
+      { text: "total", x: 10, y: 40, width: 50, height: 14, confidence: 95, block: 0, paragraph: 0, line: 1 },
+      { text: "8", x: 70, y: 40, width: 10, height: 14, confidence: 93, block: 0, paragraph: 0, line: 1 },
+    ];
+    const engine = () => ({ recognize: vi.fn().mockResolvedValue(read.map((w) => ({ ...w, x: (w.x + 8) * 3, y: (w.y + 8) * 3, width: w.width * 3, height: w.height * 3 }))) });
+    const reportOf = (kind: string, type: string) => JSON.stringify({
+      format: "imgtohtml-report", version: 1, kind, application: "desktop",
+      regions: [{ id: "t", type, parent: null, lines: ["ls -la", "total 8"] }],
+    });
+    // Shown as an app window's text, e.g. a help panel.
+    const report = reportOf("interface", "content");
+
+    it("uses the report's words, drops noise it never saw, and puts each change on the checklist", async () => {
+      const { app, png } = await setup(engine());
+      const output = await result(app, await submit(app, png, { kind: "code", report }));
+      expect(output.review.type).toBe("interface"); // the report decides the type
+      expect(output.transcript).toContain("ls -la");
+      expect(output.transcript).not.toContain("-Ia");
+      expect(output.transcript).not.toContain("Oo");
+      expect(output.review.report).toEqual({ changed: [{ from: "-Ia", to: "-la" }], dropped: ["Oo"], warnings: [], layout_problem: null });
+      expect(output.review.vision?.model).toBe("AI report");
+      const span = output.model.regions.flatMap((r) => r.lines.flatMap((l) => l.spans)).find((s) => s.text === "-la")!;
+      const region = output.model.regions.find((r) => span.id.startsWith(`${r.id}.`))!;
+      expect(region.review).toBe("pending");
+      expect(region.flags).toContainEqual(expect.objectContaining({ reason: "sources-disagree", spanId: span.id }));
+      expect(span.alternatives).toContainEqual({ source: "ocr", text: "-Ia", confidence: null });
+      expect(output.lowConfidenceCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it("drops nothing inside a terminal or code region, where every character counts", async () => {
+      const { app, png } = await setup(engine());
+      const output = await result(app, await submit(app, png, { report: reportOf("terminal", "terminal") }));
+      expect(output.transcript).toContain("ls -la");
+      expect(output.transcript).toContain("Oo");
+      expect(output.review.report?.dropped).toEqual([]);
+    });
+
+    it("never overrides a word the reviewer typed", async () => {
+      const { app, png } = await setup(engine());
+      const id = await submit(app, png, { report });
+      const output = await result(app, id);
+      const span = output.model.regions.flatMap((r) => r.lines.flatMap((l) => l.spans)).find((s) => s.text === "-la")!;
+      const edited = (await app.inject({ method: "POST", url: `/api/jobs/${id}/edit`, payload: { span: span.id, text: "-lah" } })).json<Job>();
+      expect(edited.status === "completed" && edited.result.transcript).toContain("ls -lah");
+    });
+
+    it("rejects a broken report with every problem listed, before reading the image", async () => {
+      const { app, png } = await setup(engine());
+      const response = await app.inject(multipart(png, { report: JSON.stringify({ format: "imgtohtml-report", version: 2, kind: "photo", application: "ide", regions: [] }) }));
+      expect(response.statusCode).toBe(400);
+      const error = response.json<{ error: string }>().error;
+      expect(error).toMatch(/^The AI report has problems:/);
+      expect(error).toMatch(/version must be 1/);
+      expect(error).toMatch(/kind must be one of/);
+      expect(error).toMatch(/regions must list at least one region/);
+    });
+  });
+
   it("sends security headers and hides internal error details", async () => {
     const { app } = await setup();
     app.get("/api/boom", async () => { throw new Error("ENOENT: /home/alice/secret/path"); });
