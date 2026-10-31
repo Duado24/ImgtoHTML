@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "eval": "tsx scripts/eval.ts"
+    "eval": "tsx scripts/eval.ts",
+    "scorm": "npm run build && tsx scripts/scorm.ts"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
